@@ -1,4 +1,4 @@
-# Vorrat – Setup-Anleitung
+# Stash – Setup-Anleitung
 
 Eure App ist fertig gebaut. Es fehlen noch zwei Dinge, die nur ihr selbst einrichten könnt:
 ein kostenloses Firebase-Projekt (für den Sync) und das Hosting auf GitHub Pages.

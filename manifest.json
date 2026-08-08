@@ -1,6 +1,6 @@
 {
-  "name": "Vorrat",
-  "short_name": "Vorrat",
+  "name": "Stash",
+  "short_name": "Stash",
   "description": "Gemeinsame Vorrats- und Einkaufsliste",
   "start_url": "./index.html",
   "scope": "./",

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Vorrat</title>
+<title>Stash</title>
 <meta name="description" content="Gemeinsame Vorrats- und Einkaufsliste" />
 <meta name="theme-color" content="#2B4C3F" />
 <link rel="manifest" href="./manifest.json" />
@@ -36,7 +36,7 @@
           <rect x="15" y="27" width="18" height="9" rx="3" fill="#3C6E47"/>
         </svg>
       </div>
-      <h1 class="app-title">Vorrat</h1>
+      <h1 class="app-title">Stash</h1>
       <p class="app-tagline">Eure gemeinsame Vorratskammer</p>
 
       <form id="form-auth" class="stack" autocomplete="on">
@@ -59,7 +59,7 @@
   <section id="screen-household" class="screen hidden">
     <div class="auth-card">
       <h1 class="app-title">Haushalt</h1>
-      <p class="app-tagline">Verbinde dich mit deiner Freundin, damit ihr die gleichen Vorräte seht.</p>
+      <p class="app-tagline">Verbinde dich mit deinem Haushalt, damit ihr die gleichen Vorräte seht.</p>
 
       <div class="stack">
         <button class="btn btn-primary" id="btn-create-household">Neuen Haushalt erstellen</button>
@@ -73,7 +73,7 @@
       </div>
 
       <div id="household-created" class="created-code hidden">
-        <p>Dein Haushalt ist angelegt. Gib diesen Code an deine Freundin weiter:</p>
+        <p>Dein Haushalt ist angelegt. Gib diesen Code weiter, damit die anderen beitreten können:</p>
         <div class="code-display" id="code-display"></div>
         <button class="btn btn-ghost" id="btn-copy-code">Code kopieren</button>
         <button class="btn btn-primary" id="btn-enter-app">Weiter zur App</button>
@@ -85,7 +85,7 @@
   <!-- ───────── Main app ───────── -->
   <section id="screen-main" class="screen hidden">
     <header class="topbar">
-      <h1 class="app-title small">Vorrat</h1>
+      <h1 class="app-title small">Stash</h1>
       <button class="icon-btn" id="btn-account" aria-label="Konto & Haushalt">
         <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 15a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4 0-8 2-8 5v1h16v-1c0-3-4-5-8-5Z"/></svg>
       </button>
@@ -198,7 +198,7 @@
       <h2>Konto & Haushalt</h2>
       <p class="muted" id="account-email"></p>
       <div class="modal-section">
-        <p class="muted">Beitrittscode für deine Freundin:</p>
+        <p class="muted">Beitrittscode zum Teilen:</p>
         <div class="code-display small" id="account-code"></div>
         <button class="btn btn-ghost" id="account-copy-code">Code kopieren</button>
       </div>

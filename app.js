@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// Vorrat – App-Logik
+// Stash – App-Logik
 // ═══════════════════════════════════════════════════════════════
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";

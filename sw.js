@@ -1,4 +1,4 @@
-// Vorrat – Service Worker
+// Stash – Service Worker
 // Cacht die App-Hülle, damit sie auch ohne Netz startet.
 // Firebase-Verbindungen laufen nicht über diesen Cache.
 
