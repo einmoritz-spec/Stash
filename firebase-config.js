@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────
 
 window.FIREBASE_CONFIG = {
-  apiKey: "◄◄◄ HIER DEN NEUEN KEY AUS DER GOOGLE CLOUD CONSOLE EINFÜGEN ►►►",
+  apiKey: "AIzaSyDtxa71EE4EmELntGa2XY_OqaZjoBgTcns",
   authDomain: "stash-8cf5b.firebaseapp.com",
   projectId: "stash-8cf5b",
   storageBucket: "stash-8cf5b.firebasestorage.app",
