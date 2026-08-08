@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// Regeln für die Vorrat-App.
+// Gedacht für einen privaten Haushalt mit wenigen Mitgliedern.
+// Siehe README.md, Abschnitt "Sicherheitshinweis" für die Einschränkungen.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isMember(hid) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/households/$(hid)) &&
+        request.auth.uid in get(/databases/$(database)/documents/households/$(hid)).data.memberIds;
+    }
+
+    // Jede Person darf nur ihr eigenes Nutzerdokument lesen/schreiben.
+    match /users/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Haushalte: Lesen ist für alle angemeldeten Personen nötig, damit der
+    // Beitrittscode gefunden werden kann, bevor man Mitglied ist.
+    // Schreiben (z. B. Mitglied hinzufügen) nur für bestehende Mitglieder
+    // oder beim eigenen Beitritt / bei der eigenen Neuanlage.
+    match /households/{hid} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.memberIds;
+      allow update: if isMember(hid) ||
+        (isSignedIn() && request.auth.uid in request.resource.data.memberIds);
+      allow delete: if false;
+    }
+
+    // Artikel: nur Mitglieder des jeweiligen Haushalts.
+    match /households/{hid}/items/{itemId} {
+      allow read, write: if isMember(hid);
+    }
+  }
+}
