@@ -14,43 +14,116 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ───────────────────────── Firebase Setup ─────────────────────────
-const firebaseApp = initializeApp(window.FIREBASE_CONFIG);
-const auth = getAuth(firebaseApp);
-const db = initializeFirestore(firebaseApp, { localCache: persistentLocalCache({}) });
+function showFatalError(message) {
+  const wrap = document.querySelector("#screen-loading .loading-wrap");
+  if (wrap) {
+    wrap.innerHTML = `<div class="fatal-error"><strong>Start fehlgeschlagen</strong><p>${message}</p></div>`;
+  }
+}
+
+if (!window.FIREBASE_CONFIG || !window.FIREBASE_CONFIG.apiKey || window.FIREBASE_CONFIG.apiKey.includes("HIER_")) {
+  showFatalError('firebase-config.js fehlt oder enthält noch den Platzhalter. Prüfe, ob der apiKey wirklich eingetragen wurde.');
+  throw new Error("FIREBASE_CONFIG fehlt oder unvollständig");
+}
+
+let firebaseApp, auth, db;
+try {
+  firebaseApp = initializeApp(window.FIREBASE_CONFIG);
+  auth = getAuth(firebaseApp);
+  try {
+    db = initializeFirestore(firebaseApp, { localCache: persistentLocalCache({}) });
+  } catch (cacheErr) {
+    console.warn("Offline-Cache nicht verfügbar, starte ohne:", cacheErr);
+    db = initializeFirestore(firebaseApp, {});
+  }
+} catch (err) {
+  console.error("Firebase-Init fehlgeschlagen", err);
+  showFatalError(`${err.message || err} <br><br>Prüfe die Werte in firebase-config.js auf Tippfehler (fehlende Anführungszeichen, Kommas).`);
+  throw err;
+}
+
+// Falls das Laden ungewöhnlich lange dauert, einen Hinweis einblenden
+// (z. B. weil kein Internet da ist oder die Firebase-Domain nicht erreichbar ist).
+setTimeout(() => {
+  if (!$("screen-loading").classList.contains("hidden")) {
+    const wrap = document.querySelector("#screen-loading .loading-wrap");
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "Das dauert länger als gewöhnlich. Prüfe deine Internetverbindung oder ob firebase-config.js korrekt ist.";
+    wrap.appendChild(hint);
+  }
+}, 7000);
 
 // ───────────────────────── Eingebauter Katalog ─────────────────────────
-// Dient nur als Vorschlag/Kategorie-Rateshilfe beim Anlegen neuer Artikel.
-// Wird nicht automatisch gespeichert.
+// Dient als Vorschlag beim Anlegen neuer Artikel und ordnet bekannte Namen
+// automatisch einer Themen-Gruppe zu. "group: null" heißt bewusst: passt zu
+// keiner Gruppe, bleibt lose stehen (z. B. Klopapier, Batterien).
 const CATALOG = [
-  ["Milch","essen","Liter"],["Butter","essen","Packung"],["Eier","essen","10er Pack"],
-  ["Käse","essen","Packung"],["Joghurt","essen","Becher"],["Brot","essen","Laib"],
-  ["Mehl","essen","kg"],["Zucker","essen","kg"],["Salz","essen","Packung"],
-  ["Nudeln","essen","Packung"],["Reis","essen","Packung"],["Kaffee","essen","Packung"],
-  ["Tee","essen","Packung"],["Öl","essen","Flasche"],["Essig","essen","Flasche"],
-  ["Honig","essen","Glas"],["Marmelade","essen","Glas"],["Ketchup","essen","Flasche"],
-  ["Senf","essen","Tube"],["Mayonnaise","essen","Glas"],["Tomaten (Dose)","essen","Dose"],
-  ["Passierte Tomaten","essen","Packung"],["Thunfisch","essen","Dose"],["Kichererbsen","essen","Dose"],
-  ["Kartoffeln","essen","kg"],["Zwiebeln","essen","kg"],["Knoblauch","essen","Stück"],
-  ["Äpfel","essen","kg"],["Bananen","essen","kg"],["Zitronen","essen","Stück"],
-  ["Orangensaft","essen","Liter"],["Wasser","essen","Kiste"],["Bier","essen","Kiste"],
-  ["Wein","essen","Flasche"],["Schokolade","essen","Tafel"],["Kekse","essen","Packung"],
-  ["Müsli","essen","Packung"],["Haferflocken","essen","Packung"],["Backpulver","essen","Packung"],
-  ["Tiefkühlgemüse","essen","Packung"],["Hackfleisch","essen","kg"],["Hähnchenbrust","essen","kg"],
-  ["Frischkäse","essen","Packung"],["Sahne","essen","Becher"],
-  ["Klopapier","haushalt","Packung"],["Küchenrolle","haushalt","Rolle"],
-  ["Spülmittel","haushalt","Flasche"],["Spülmaschinentabs","haushalt","Packung"],
-  ["Waschmittel","haushalt","Packung"],["Weichspüler","haushalt","Flasche"],
-  ["Müllbeutel","haushalt","Rolle"],["Gefrierbeutel","haushalt","Packung"],
-  ["Alufolie","haushalt","Rolle"],["Frischhaltefolie","haushalt","Rolle"],
-  ["Backpapier","haushalt","Rolle"],["Batterien","haushalt","Packung"],
-  ["Zahnpasta","haushalt","Tube"],["Duschgel","haushalt","Flasche"],
-  ["Shampoo","haushalt","Flasche"],["Deo","haushalt","Stück"],
-  ["Rasierklingen","haushalt","Packung"],["Seife","haushalt","Stück"],
-  ["Allzweckreiniger","haushalt","Flasche"],["WC-Reiniger","haushalt","Flasche"],
-  ["Glasreiniger","haushalt","Flasche"],["Kerzen","haushalt","Stück"],
-  ["Feuerzeug","haushalt","Stück"],["Taschentücher","haushalt","Packung"],
-  ["Wattepads","haushalt","Packung"],["Kaffeefilter","haushalt","Packung"]
-].map(([name, category, unit]) => ({ name, category, unit }));
+  ["Milch","Liter","Milchprodukte"],["Butter","Packung","Milchprodukte"],["Eier","10er Pack",null],
+  ["Käse","Packung","Milchprodukte"],["Joghurt","Becher","Milchprodukte"],["Brot","Laib","Brot & Getreide"],
+  ["Mehl","kg","Brot & Getreide"],["Zucker","kg","Gewürze & Zutaten"],["Salz","Packung","Gewürze & Zutaten"],
+  ["Nudeln","Packung","Brot & Getreide"],["Reis","Packung","Brot & Getreide"],["Kaffee","Packung","Getränke"],
+  ["Tee","Packung","Getränke"],["Öl","Flasche","Gewürze & Zutaten"],["Essig","Flasche","Gewürze & Zutaten"],
+  ["Honig","Glas","Süßes & Snacks"],["Marmelade","Glas","Süßes & Snacks"],["Ketchup","Flasche","Gewürze & Zutaten"],
+  ["Senf","Tube","Gewürze & Zutaten"],["Mayonnaise","Glas","Gewürze & Zutaten"],["Tomaten (Dose)","Dose","Konserven & Vorrat"],
+  ["Passierte Tomaten","Packung","Konserven & Vorrat"],["Thunfisch","Dose","Konserven & Vorrat"],["Kichererbsen","Dose","Konserven & Vorrat"],
+  ["Kartoffeln","kg","Gemüse"],["Zwiebeln","kg","Gemüse"],["Knoblauch","Stück","Gemüse"],
+  ["Äpfel","kg","Obst"],["Bananen","kg","Obst"],["Zitronen","Stück","Obst"],
+  ["Orangensaft","Liter","Getränke"],["Wasser","Kiste","Getränke"],["Bier","Kiste","Getränke"],
+  ["Wein","Flasche","Getränke"],["Schokolade","Tafel","Süßes & Snacks"],["Kekse","Packung","Süßes & Snacks"],
+  ["Müsli","Packung","Brot & Getreide"],["Haferflocken","Packung","Brot & Getreide"],["Backpulver","Packung","Gewürze & Zutaten"],
+  ["Tiefkühlgemüse","Packung","Gemüse"],["Hackfleisch","kg","Fleisch & Fisch"],["Hähnchenbrust","kg","Fleisch & Fisch"],
+  ["Frischkäse","Packung","Milchprodukte"],["Sahne","Becher","Milchprodukte"],
+  ["Klopapier","Packung",null],["Küchenrolle","Rolle",null],
+  ["Spülmittel","Flasche","Putzmittel"],["Spülmaschinentabs","Packung","Putzmittel"],
+  ["Waschmittel","Packung","Putzmittel"],["Weichspüler","Flasche","Putzmittel"],
+  ["Müllbeutel","Rolle",null],["Gefrierbeutel","Packung",null],
+  ["Alufolie","Rolle",null],["Frischhaltefolie","Rolle",null],
+  ["Backpapier","Rolle",null],["Batterien","Packung",null],
+  ["Zahnpasta","Tube","Hygiene"],["Duschgel","Flasche","Hygiene"],
+  ["Shampoo","Flasche","Hygiene"],["Deo","Stück","Hygiene"],
+  ["Rasierklingen","Packung","Hygiene"],["Seife","Stück","Hygiene"],
+  ["Allzweckreiniger","Flasche","Putzmittel"],["WC-Reiniger","Flasche","Putzmittel"],
+  ["Glasreiniger","Flasche","Putzmittel"],["Kerzen","Stück",null],
+  ["Feuerzeug","Stück",null],["Taschentücher","Packung","Hygiene"],
+  ["Wattepads","Packung","Hygiene"],["Kaffeefilter","Packung",null],
+  ["Sonnencreme","Tube","Kosmetik"],["Handcreme","Tube","Kosmetik"],["Bodylotion","Flasche","Kosmetik"],
+].map(([name, unit, group]) => ({ name, unit, group }));
+
+// Feste Anzeige-Reihenfolge der Themen-Gruppen im Vorrat.
+const GROUP_ORDER = [
+  "Obst", "Gemüse", "Milchprodukte", "Fleisch & Fisch", "Brot & Getreide",
+  "Konserven & Vorrat", "Gewürze & Zutaten", "Süßes & Snacks", "Getränke",
+  "Putzmittel", "Hygiene", "Kosmetik",
+];
+
+// Fallback-Stichwörter für Artikel, die nicht exakt im Katalog stehen
+// (z. B. eigene Schreibweisen oder Mehrzahlformen).
+const FALLBACK_KEYWORDS = [
+  { group: "Milchprodukte", words: ["milch", "käse", "joghurt", "quark", "sahne", "butter"] },
+  { group: "Obst", words: ["apfel", "äpfel", "banane", "zitrone", "orange", "traube", "beere", "birne", "mandarine", "kiwi", "melone", "pfirsich", "mango", "ananas"] },
+  { group: "Gemüse", words: ["kartoffel", "zwiebel", "knoblauch", "tomate", "gurke", "paprika", "karotte", "salat", "brokkoli", "spinat", "pilz", "zucchini", "möhre"] },
+  { group: "Fleisch & Fisch", words: ["hackfleisch", "hähnchen", "fisch", "wurst", "schinken", "speck", "filet"] },
+  { group: "Brot & Getreide", words: ["brot", "brötchen", "mehl", "nudel", "reis", "müsli", "haferflocken", "toast"] },
+  { group: "Konserven & Vorrat", words: ["dose", "konserve"] },
+  { group: "Süßes & Snacks", words: ["schokolade", "keks", "gummibär", "chips", "süßigkeit"] },
+  { group: "Getränke", words: ["wasser", "saft", "bier", "wein", "limonade", "cola"] },
+  { group: "Putzmittel", words: ["reiniger", "spülmittel", "waschmittel", "weichspüler"] },
+  { group: "Hygiene", words: ["zahnpasta", "zahnbürste", "duschgel", "shampoo", "deo", "rasier", "seife", "tampon", "binde"] },
+  { group: "Kosmetik", words: ["creme", "sonnencreme", "lotion", "parfum", "makeup"] },
+];
+
+// Ordnet einen Artikelnamen automatisch einer Themen-Gruppe zu, oder null,
+// wenn nichts passt (dann bleibt der Artikel lose unter "Sonstiges" stehen).
+function classifyGroup(name) {
+  const n = normalize(name);
+  const catalogHit = CATALOG.find((c) => normalize(c.name) === n);
+  if (catalogHit) return catalogHit.group || null;
+  for (const rule of FALLBACK_KEYWORDS) {
+    if (rule.words.some((w) => n.includes(w))) return rule.group;
+  }
+  return null;
+}
 
 const JOIN_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
@@ -66,6 +139,10 @@ const state = {
   pendingCheckoffs: new Map(), // itemId -> { timer }
 };
 let currentEditId = null;
+let expandedGroups = null; // null = noch nicht initialisiert (siehe renderVorratGrouped)
+let pendingBarcode = null;
+let scannerStream = null;
+let scannerActive = false;
 let authMode = "login";
 let toastTimer = null;
 let suggestDebounce = null;
@@ -393,13 +470,12 @@ function gaugePercent(item) {
 function itemRowHtml(item) {
   const status = computeStatus(item);
   const pct = gaugePercent(item);
-  const catLabel = item.category === "essen" ? "Essen" : "Haushalt";
   return `
   <div class="item-row" data-id="${item.id}">
     <div class="gauge"><div class="gauge-fill ${status}" style="height:${pct}%"></div></div>
     <div class="item-main">
       <div class="item-name">${item.staple ? '<span class="staple-pin">📌</span> ' : ""}${esc(item.name)}</div>
-      <div class="item-meta">${item.unit ? esc(item.unit) : ""} · ${catLabel}${item.location ? " · " + esc(item.location) : ""}${item.autoDecrement ? ' <span class="auto-pin" title="Automatischer Verbrauch aktiv">⏱</span>' : ""}</div>
+      <div class="item-meta">${item.unit ? esc(item.unit) : ""}${item.location ? " · " + esc(item.location) : ""}${item.autoDecrement ? ' <span class="auto-pin" title="Automatischer Verbrauch aktiv">⏱</span>' : ""}</div>
     </div>
     <button class="round-btn" data-action="minus" data-id="${item.id}" aria-label="Weniger">−</button>
     <button class="item-stock-tap" data-action="open" data-id="${item.id}">${formatQty(item.stock)}</button>
@@ -408,7 +484,7 @@ function itemRowHtml(item) {
 }
 
 function distinctLocations() {
-  const locs = new Set(["Keller"]); // soll laut Anforderung immer verfügbar sein
+  const locs = new Set();
   state.items.forEach((it) => { if (it.location) locs.add(it.location); });
   return [...locs].sort((a, b) => a.localeCompare(b, "de"));
 }
@@ -418,14 +494,74 @@ function refreshLocationDatalist() {
 }
 
 function renderFilterChips() {
-  const base = [["alle", "Alle"], ["essen", "Essen"], ["haushalt", "Haushalt"], ["fehlt", "Fehlt"]];
-  const locChips = distinctLocations().map((l) => ["loc:" + l, l]);
-  const all = [...base, ...locChips];
-  // Falls der aktuell aktive Lagerort-Filter nicht mehr existiert, zurück auf "Alle"
+  const all = [["alle", "Alle"], ["fehlt", "Fehlt"]];
   if (!all.some(([val]) => val === state.vorratFilter)) state.vorratFilter = "alle";
   $("vorrat-filters").innerHTML = all
     .map(([val, label]) => `<button class="chip${state.vorratFilter === val ? " active" : ""}" data-filter="${esc(val)}">${esc(label)}</button>`)
     .join("");
+}
+
+function sortItems(items) {
+  return [...items].sort((a, b) => {
+    const staDiff = (b.staple ? 1 : 0) - (a.staple ? 1 : 0);
+    if (staDiff !== 0) return staDiff;
+    return a.name.localeCompare(b.name, "de");
+  });
+}
+
+function accordionHeaderHtml(key, label, count, attentionCount, isOpen) {
+  return `
+  <button type="button" class="accordion-header" data-group="${esc(key)}" aria-expanded="${isOpen}">
+    <span class="accordion-chevron">${isOpen ? "▾" : "▸"}</span>
+    <span class="accordion-label">${esc(label)}</span>
+    ${attentionCount > 0 ? `<span class="accordion-alert">${attentionCount}</span>` : ""}
+    <span class="accordion-count">${count}</span>
+  </button>`;
+}
+
+// Baut die gruppierte Ansicht mit aufklappbaren Themen-Bereichen.
+// Wird nur genutzt, wenn weder gesucht noch nach "Fehlt" gefiltert wird -
+// in diesen Fällen zeigen wir stattdessen eine einfache flache Trefferliste.
+function renderVorratGrouped(items) {
+  const staples = items.filter((it) => it.staple);
+  const rest = items.filter((it) => !it.staple);
+
+  const byGroup = {};
+  const ungrouped = [];
+  rest.forEach((it) => {
+    const g = classifyGroup(it.name);
+    if (g) { (byGroup[g] ||= []).push(it); } else { ungrouped.push(it); }
+  });
+
+  // Beim allerersten Rendern: Gruppen mit fehlenden Artikeln automatisch
+  // aufklappen, alle anderen eingeklappt lassen. Danach bleibt es dem
+  // manuellen Auf-/Zuklappen überlassen, damit es nicht bei jeder
+  // Bestandsänderung wieder aufspringt.
+  if (expandedGroups === null) {
+    expandedGroups = new Set(
+      GROUP_ORDER.filter((g) => (byGroup[g] || []).some((it) => computeStatus(it) !== "good"))
+    );
+  }
+
+  let html = "";
+  if (staples.length) {
+    html += `<div class="group-heading">📌 Dauerartikel</div>` + sortItems(staples).map(itemRowHtml).join("");
+  }
+
+  GROUP_ORDER.forEach((key) => {
+    const list = byGroup[key];
+    if (!list || !list.length) return;
+    const isOpen = expandedGroups.has(key);
+    const attentionCount = list.filter((it) => computeStatus(it) !== "good").length;
+    html += accordionHeaderHtml(key, key, list.length, attentionCount, isOpen);
+    if (isOpen) html += `<div class="accordion-body">${sortItems(list).map(itemRowHtml).join("")}</div>`;
+  });
+
+  if (ungrouped.length) {
+    html += `<div class="group-heading">Sonstiges</div>` + sortItems(ungrouped).map(itemRowHtml).join("");
+  }
+
+  $("vorrat-list").innerHTML = html;
 }
 
 function renderVorrat() {
@@ -443,17 +579,8 @@ function renderVorrat() {
   }
 
   let items = allActive.filter((it) => it.showInVorrat !== false);
-  if (filter === "essen" || filter === "haushalt") items = items.filter((it) => it.category === filter);
-  else if (filter === "fehlt") items = items.filter((it) => computeStatus(it) !== "good");
-  else if (filter.startsWith("loc:")) items = items.filter((it) => it.location === filter.slice(4));
-  if (q) items = items.filter((it) => normalize(it.name).includes(q));
-
-  items.sort((a, b) => {
-    const staDiff = (b.staple ? 1 : 0) - (a.staple ? 1 : 0);
-    if (staDiff !== 0) return staDiff;
-    if (a.category !== b.category) return a.category === "essen" ? -1 : 1;
-    return a.name.localeCompare(b.name, "de");
-  });
+  if (filter === "fehlt") items = items.filter((it) => computeStatus(it) !== "good");
+  if (q) items = items.filter((it) => normalize(it.name).includes(q) || normalize(it.location || "").includes(q));
 
   if (items.length === 0) {
     $("vorrat-list").innerHTML = "";
@@ -462,7 +589,15 @@ function renderVorrat() {
     return;
   }
   $("vorrat-empty").classList.add("hidden");
-  $("vorrat-list").innerHTML = items.map(itemRowHtml).join("");
+
+  // Nur in der unveränderten "Alle"-Ansicht ohne Suche gruppieren.
+  // Bei Suche oder "Fehlt"-Filter reicht eine einfache, flache Liste -
+  // dort will man sofort alle Treffer sehen, nicht erst aufklappen.
+  if (filter === "alle" && !q) {
+    renderVorratGrouped(items);
+  } else {
+    $("vorrat-list").innerHTML = sortItems(items).map(itemRowHtml).join("");
+  }
 }
 
 // ───────────────────────── Rendering: Einkaufsliste ─────────────────────────
@@ -488,17 +623,21 @@ function renderListe() {
   const items = state.items.filter(
     (it) => it.active !== false && !it.snoozed && (it.forced || (it.stock || 0) <= (it.minStock || 0))
   );
-  items.sort((a, b) => {
-    if (a.category !== b.category) return a.category === "essen" ? -1 : 1;
-    return a.name.localeCompare(b.name, "de");
+
+  const byGroup = {};
+  const ungrouped = [];
+  items.forEach((it) => {
+    const g = classifyGroup(it.name);
+    if (g) { (byGroup[g] ||= []).push(it); } else { ungrouped.push(it); }
   });
 
-  const essen = items.filter((i) => i.category === "essen");
-  const haushalt = items.filter((i) => i.category === "haushalt");
-
   let html = "";
-  if (essen.length) html += groupHtml("Essen", essen);
-  if (haushalt.length) html += groupHtml("Haushalt", haushalt);
+  GROUP_ORDER.forEach((key) => {
+    const list = byGroup[key];
+    if (list && list.length) html += groupHtml(key, sortItems(list));
+  });
+  if (ungrouped.length) html += groupHtml("Sonstiges", sortItems(ungrouped));
+
   $("liste-groups").innerHTML = html;
   $("liste-empty").classList.toggle("hidden", items.length > 0);
 
@@ -582,7 +721,6 @@ function openItemModal(id) {
   $("item-stock-unit").textContent = item.unit || "";
   $("item-minstock").value = item.minStock ?? 1;
   $("item-target").value = item.targetStock ?? 2;
-  $("item-category").value = item.category || "essen";
   $("item-unit").value = item.unit || "";
   $("item-location").value = item.location || "";
   $("item-staple").checked = !!item.staple;
@@ -621,14 +759,14 @@ function getSuggestions(query, limitN = 6) {
   for (const it of state.items) {
     const s = matchScore(q, it.name);
     if (s > 0) {
-      results.push({ name: it.name, category: it.category, unit: it.unit, existingId: it.id, buyCount: it.buyCount || 0, active: it.active !== false, score: s });
+      results.push({ name: it.name, unit: it.unit, existingId: it.id, buyCount: it.buyCount || 0, active: it.active !== false, score: s });
       seen.add(normalize(it.name));
     }
   }
   for (const c of CATALOG) {
     if (seen.has(normalize(c.name))) continue;
     const s = matchScore(q, c.name);
-    if (s > 0) results.push({ name: c.name, category: c.category, unit: c.unit, buyCount: 0, score: s - 5 });
+    if (s > 0) results.push({ name: c.name, unit: c.unit, buyCount: 0, score: s - 5 });
   }
   results.sort((a, b) => b.score - a.score || b.buyCount - a.buyCount || a.name.localeCompare(b.name, "de"));
   return results.slice(0, limitN);
@@ -640,7 +778,11 @@ function showSuggestions(query, container, onPick) {
     const results = getSuggestions(query);
     if (!results.length) { container.classList.add("hidden"); container.innerHTML = ""; return; }
     container.innerHTML = results
-      .map((r, i) => `<div class="suggestion-item" data-idx="${i}"><span>${esc(r.name)}</span><span class="suggestion-cat">${r.category === "essen" ? "Essen" : "Haushalt"}${r.existingId ? (r.active ? " · im Vorrat" : " · archiviert") : ""}</span></div>`)
+      .map((r, i) => {
+        const group = classifyGroup(r.name);
+        const tag = r.existingId ? (r.active ? "im Vorrat" : "archiviert") : (group || "Sonstiges");
+        return `<div class="suggestion-item" data-idx="${i}"><span>${esc(r.name)}</span><span class="suggestion-cat">${esc(tag)}</span></div>`;
+      })
       .join("");
     container.classList.remove("hidden");
     container.querySelectorAll(".suggestion-item").forEach((el) => {
@@ -729,6 +871,105 @@ function wireHouseholdScreen() {
   $("btn-signout-household").addEventListener("click", () => signOut(auth));
 }
 
+// ───────────────────────── Barcode-Scanner ─────────────────────────
+async function openScanner(onResult) {
+  $("scanner-status").textContent = "Kamera wird gestartet…";
+  $("modal-scanner").classList.remove("hidden");
+
+  if (!("BarcodeDetector" in window)) {
+    $("scanner-status").textContent = "Barcode-Scan wird auf diesem Gerät/Browser nicht unterstützt. Bitte Namen manuell eingeben.";
+    return;
+  }
+
+  let detector;
+  try {
+    detector = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "qr_code"] });
+  } catch {
+    $("scanner-status").textContent = "Barcode-Scan wird auf diesem Gerät/Browser nicht unterstützt. Bitte Namen manuell eingeben.";
+    return;
+  }
+
+  try {
+    scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+  } catch (err) {
+    console.error(err);
+    $("scanner-status").textContent = "Kein Kamera-Zugriff. Bitte in den Browser-Einstellungen erlauben, oder Namen manuell eingeben.";
+    return;
+  }
+
+  const video = $("scanner-video");
+  video.srcObject = scannerStream;
+  await video.play().catch(() => {});
+  $("scanner-status").textContent = "Barcode ins Feld halten…";
+  scannerActive = true;
+
+  const loop = async () => {
+    if (!scannerActive) return;
+    try {
+      const codes = await detector.detect(video);
+      if (codes.length > 0) {
+        const value = codes[0].rawValue;
+        closeScanner();
+        onResult(value);
+        return;
+      }
+    } catch (err) {
+      // einzelne fehlgeschlagene Frames sind normal, weiter versuchen
+    }
+    if (scannerActive) requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+
+function closeScanner() {
+  scannerActive = false;
+  if (scannerStream) {
+    scannerStream.getTracks().forEach((t) => t.stop());
+    scannerStream = null;
+  }
+  $("scanner-video").srcObject = null;
+  $("modal-scanner").classList.add("hidden");
+}
+
+async function handleScannedBarcode(code) {
+  switchTab("neu");
+
+  const existing = state.items.find((it) => it.barcode === code);
+  if (existing) {
+    if (existing.active === false) {
+      await updateDoc(itemRef(existing.id), { active: true, updatedAt: serverTimestamp() });
+    }
+    openItemModal(existing.id);
+    switchTab("vorrat");
+    showToast(`„${existing.name}" gefunden`);
+    return;
+  }
+
+  pendingBarcode = code;
+  $("new-barcode-hint").textContent = `Barcode ${code} gespeichert. Suche Produktinfo…`;
+  $("new-barcode-hint").classList.remove("hidden");
+
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`);
+    const json = await res.json();
+    if (json.status === 1 && json.product) {
+      const name = json.product.product_name_de || json.product.product_name || "";
+      if (name) {
+        $("new-name").value = name;
+      }
+      $("new-barcode-hint").textContent = name
+        ? `Barcode ${code} – Produkt gefunden: „${name}". Bitte prüfen und ergänzen.`
+        : `Barcode ${code} gespeichert, aber kein Name gefunden. Bitte Namen eintragen.`;
+    } else {
+      $("new-barcode-hint").textContent = `Barcode ${code} gespeichert, Produkt nicht in der Datenbank gefunden. Bitte Namen eintragen.`;
+    }
+  } catch (err) {
+    console.error(err);
+    $("new-barcode-hint").textContent = `Barcode ${code} gespeichert (Produktsuche gerade nicht erreichbar). Bitte Namen eintragen.`;
+  }
+  $("new-name").focus();
+}
+
 function wireMainScreen() {
   document.querySelectorAll(".navbtn").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
 
@@ -746,6 +987,14 @@ function wireMainScreen() {
     renderVorrat();
   });
   $("vorrat-list").addEventListener("click", (e) => {
+    const header = e.target.closest(".accordion-header");
+    if (header) {
+      const key = header.dataset.group;
+      if (expandedGroups === null) expandedGroups = new Set();
+      if (expandedGroups.has(key)) expandedGroups.delete(key); else expandedGroups.add(key);
+      renderVorrat();
+      return;
+    }
     const btn = e.target.closest("button[data-action]");
     if (!btn) return;
     const id = btn.dataset.id;
@@ -780,17 +1029,19 @@ function wireMainScreen() {
       if (picked.existingId) {
         hideSuggestions($("new-name-suggestions"));
         $("new-name").value = "";
+        if (!picked.active) updateDoc(itemRef(picked.existingId), { active: true, updatedAt: serverTimestamp() });
         openItemModal(picked.existingId);
         switchTab("vorrat");
       } else {
         $("new-name").value = picked.name;
-        $("new-category").value = picked.category;
         $("new-unit").value = picked.unit;
         hideSuggestions($("new-name-suggestions"));
       }
     })
   );
   $("form-new-item").addEventListener("submit", submitNewItem);
+  $("btn-scan-new").addEventListener("click", () => openScanner(handleScannedBarcode));
+  $("scanner-close").addEventListener("click", closeScanner);
 
   document.addEventListener("click", (e) => {
     document.querySelectorAll(".suggestions").forEach((s) => {
@@ -814,8 +1065,6 @@ function wireMainScreen() {
     updateDoc(itemRef(currentEditId), { minStock: parseFloat($("item-minstock").value) || 0, updatedAt: serverTimestamp() }));
   $("item-target").addEventListener("change", () => currentEditId &&
     updateDoc(itemRef(currentEditId), { targetStock: parseFloat($("item-target").value) || 0, updatedAt: serverTimestamp() }));
-  $("item-category").addEventListener("change", () => currentEditId &&
-    updateDoc(itemRef(currentEditId), { category: $("item-category").value, updatedAt: serverTimestamp() }));
   $("item-unit").addEventListener("change", () => currentEditId &&
     updateDoc(itemRef(currentEditId), { unit: $("item-unit").value.trim(), updatedAt: serverTimestamp() }));
   $("item-location").addEventListener("change", () => currentEditId &&
@@ -834,8 +1083,16 @@ function wireMainScreen() {
 
   $("item-archive").addEventListener("click", async () => {
     if (!currentEditId) return;
-    if (!confirm('Diesen Artikel archivieren? Er verschwindet aus Vorrat und Liste, bleibt aber für die Autovervollständigung gespeichert.')) return;
-    await updateDoc(itemRef(currentEditId), { active: false, forced: false, snoozed: false });
+    if (!confirm('Artikel aus Vorrat und Einkaufsliste entfernen? Er bleibt im Hintergrund gespeichert, damit er dir beim erneuten Eintippen als Vorschlag angeboten wird - du kannst ihn also jederzeit wieder hinzufügen.')) return;
+    await updateDoc(itemRef(currentEditId), { active: false, forced: false, snoozed: false, staple: false });
+    closeItemModal();
+  });
+
+  $("item-delete").addEventListener("click", async () => {
+    if (!currentEditId) return;
+    const item = state.items.find((i) => i.id === currentEditId);
+    if (!confirm(`„${item ? item.name : "Artikel"}" endgültig löschen? Das kann nicht rückgängig gemacht werden, und er wird auch nicht mehr als Vorschlag beim Eintippen erscheinen.`)) return;
+    await deleteDoc(itemRef(currentEditId));
     closeItemModal();
   });
 }
@@ -854,7 +1111,6 @@ async function submitQuickAdd() {
   const catalogMatch = CATALOG.find((c) => normalize(c.name) === normalize(name));
   await addDoc(collection(db, "households", state.householdId, "items"), {
     name, nameLower: normalize(name),
-    category: catalogMatch ? catalogMatch.category : "haushalt",
     unit: catalogMatch ? catalogMatch.unit : "Stück",
     location: "",
     stock: 0, minStock: 1, targetStock: 1,
@@ -870,10 +1126,20 @@ async function submitNewItem(e) {
   const name = $("new-name").value.trim();
   if (!name) return;
 
-  const dup = state.items.find((it) => it.active !== false && normalize(it.name) === normalize(name));
+  const dup = state.items.find((it) => normalize(it.name) === normalize(name));
   if (dup) {
-    $("new-item-hint").textContent = `„${dup.name}" gibt es schon – öffne den Artikel zum Bearbeiten.`;
+    const dupUpdate = { updatedAt: serverTimestamp() };
+    if (dup.active === false) {
+      dupUpdate.active = true;
+      $("new-item-hint").textContent = `„${dup.name}" war entfernt und ist jetzt wieder im Vorrat.`;
+    } else {
+      $("new-item-hint").textContent = `„${dup.name}" gibt es schon – öffne den Artikel zum Bearbeiten.`;
+    }
+    if (pendingBarcode && !dup.barcode) dupUpdate.barcode = pendingBarcode;
+    await updateDoc(itemRef(dup.id), dupUpdate);
     $("new-item-hint").classList.remove("hidden");
+    pendingBarcode = null;
+    $("new-barcode-hint").classList.add("hidden");
     openItemModal(dup.id);
     switchTab("vorrat");
     return;
@@ -881,9 +1147,9 @@ async function submitNewItem(e) {
 
   const data = {
     name, nameLower: normalize(name),
-    category: $("new-category").value,
     unit: $("new-unit").value.trim() || "Stück",
     location: $("new-location").value.trim(),
+    barcode: pendingBarcode || null,
     stock: parseFloat($("new-stock").value) || 0,
     minStock: parseFloat($("new-minstock").value) || 0,
     targetStock: parseFloat($("new-target").value) || 1,
@@ -894,6 +1160,8 @@ async function submitNewItem(e) {
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: state.uid,
   };
   await addDoc(collection(db, "households", state.householdId, "items"), data);
+  pendingBarcode = null;
+  $("new-barcode-hint").classList.add("hidden");
 
   $("new-item-hint").textContent = `„${name}" wurde angelegt.`;
   $("new-item-hint").classList.remove("hidden");
