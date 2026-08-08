@@ -59,42 +59,423 @@ setTimeout(() => {
 // automatisch einer Themen-Gruppe zu. "group: null" heißt bewusst: passt zu
 // keiner Gruppe, bleibt lose stehen (z. B. Klopapier, Batterien).
 const CATALOG = [
-  ["Milch","Liter","Milchprodukte"],["Butter","Packung","Milchprodukte"],["Eier","10er Pack",null],
-  ["Käse","Packung","Milchprodukte"],["Joghurt","Becher","Milchprodukte"],["Brot","Laib","Brot & Getreide"],
-  ["Mehl","kg","Brot & Getreide"],["Zucker","kg","Gewürze & Zutaten"],["Salz","Packung","Gewürze & Zutaten"],
-  ["Nudeln","Packung","Brot & Getreide"],["Reis","Packung","Brot & Getreide"],["Kaffee","Packung","Getränke"],
-  ["Tee","Packung","Getränke"],["Öl","Flasche","Gewürze & Zutaten"],["Essig","Flasche","Gewürze & Zutaten"],
-  ["Honig","Glas","Süßes & Snacks"],["Marmelade","Glas","Süßes & Snacks"],["Ketchup","Flasche","Gewürze & Zutaten"],
-  ["Senf","Tube","Gewürze & Zutaten"],["Mayonnaise","Glas","Gewürze & Zutaten"],["Tomaten (Dose)","Dose","Konserven & Vorrat"],
-  ["Passierte Tomaten","Packung","Konserven & Vorrat"],["Thunfisch","Dose","Konserven & Vorrat"],["Kichererbsen","Dose","Konserven & Vorrat"],
-  ["Kartoffeln","kg","Gemüse"],["Zwiebeln","kg","Gemüse"],["Knoblauch","Stück","Gemüse"],
-  ["Äpfel","kg","Obst"],["Bananen","kg","Obst"],["Zitronen","Stück","Obst"],
-  ["Orangensaft","Liter","Getränke"],["Wasser","Kiste","Getränke"],["Bier","Kiste","Getränke"],
-  ["Wein","Flasche","Getränke"],["Schokolade","Tafel","Süßes & Snacks"],["Kekse","Packung","Süßes & Snacks"],
-  ["Müsli","Packung","Brot & Getreide"],["Haferflocken","Packung","Brot & Getreide"],["Backpulver","Packung","Gewürze & Zutaten"],
-  ["Tiefkühlgemüse","Packung","Gemüse"],["Hackfleisch","kg","Fleisch & Fisch"],["Hähnchenbrust","kg","Fleisch & Fisch"],
-  ["Frischkäse","Packung","Milchprodukte"],["Sahne","Becher","Milchprodukte"],
-  ["Klopapier","Packung",null],["Küchenrolle","Rolle",null],
-  ["Spülmittel","Flasche","Putzmittel"],["Spülmaschinentabs","Packung","Putzmittel"],
-  ["Waschmittel","Packung","Putzmittel"],["Weichspüler","Flasche","Putzmittel"],
-  ["Müllbeutel","Rolle",null],["Gefrierbeutel","Packung",null],
-  ["Alufolie","Rolle",null],["Frischhaltefolie","Rolle",null],
-  ["Backpapier","Rolle",null],["Batterien","Packung",null],
-  ["Zahnpasta","Tube","Hygiene"],["Duschgel","Flasche","Hygiene"],
-  ["Shampoo","Flasche","Hygiene"],["Deo","Stück","Hygiene"],
-  ["Rasierklingen","Packung","Hygiene"],["Seife","Stück","Hygiene"],
-  ["Allzweckreiniger","Flasche","Putzmittel"],["WC-Reiniger","Flasche","Putzmittel"],
-  ["Glasreiniger","Flasche","Putzmittel"],["Kerzen","Stück",null],
-  ["Feuerzeug","Stück",null],["Taschentücher","Packung","Hygiene"],
-  ["Wattepads","Packung","Hygiene"],["Kaffeefilter","Packung",null],
-  ["Sonnencreme","Tube","Kosmetik"],["Handcreme","Tube","Kosmetik"],["Bodylotion","Flasche","Kosmetik"],
+  ["Brot","Laib","Brot & Getreide"],
+  ["Wasser","Kiste","Getränke"],
+  ["Wein","Flasche","Getränke"],
+  ["Öl","Flasche","Gewürze & Zutaten"],
+  ["Tee","Packung","Getränke"],
+  ["Deo","Stück","Hygiene"],
+  ["Taschentücher","Packung","Hygiene"],
+  ["Gefrierbeutel","Packung",null],
+  ["Tomaten (Dose)","Dose","Konserven & Vorrat"],
+  ["Thunfisch","Dose","Konserven & Vorrat"],
+  ["Tiefkühlgemüse","Packung","Gemüse"],
+  ["Milch","Liter","Milchprodukte"],
+  ["Vollmilch","Liter","Milchprodukte"],
+  ["Hafermilch","Liter","Milchprodukte"],
+  ["Sojamilch","Liter","Milchprodukte"],
+  ["Buttermilch","Liter","Milchprodukte"],
+  ["Ayran","Flasche","Milchprodukte"],
+  ["Kefir","Flasche","Milchprodukte"],
+  ["Kaffeesahne","Packung","Milchprodukte"],
+  ["Butter","Packung","Milchprodukte"],
+  ["Margarine","Packung","Milchprodukte"],
+  ["Joghurt","Becher","Milchprodukte"],
+  ["Naturjoghurt","Becher","Milchprodukte"],
+  ["Quark","Becher","Milchprodukte"],
+  ["Sahne","Becher","Milchprodukte"],
+  ["Schlagsahne","Becher","Milchprodukte"],
+  ["Schmand","Becher","Milchprodukte"],
+  ["Crème fraîche","Becher","Milchprodukte"],
+  ["Mascarpone","Becher","Milchprodukte"],
+  ["Ricotta","Becher","Milchprodukte"],
+  ["Käse","Packung","Milchprodukte"],
+  ["Gouda","Packung","Milchprodukte"],
+  ["Emmentaler","Packung","Milchprodukte"],
+  ["Mozzarella","Packung","Milchprodukte"],
+  ["Parmesan","Stück","Milchprodukte"],
+  ["Feta","Packung","Milchprodukte"],
+  ["Camembert","Stück","Milchprodukte"],
+  ["Gorgonzola","Packung","Milchprodukte"],
+  ["Ziegenkäse","Packung","Milchprodukte"],
+  ["Schafskäse","Packung","Milchprodukte"],
+  ["Frischkäse","Packung","Milchprodukte"],
+  ["Äpfel","kg","Obst"],
+  ["Bananen","kg","Obst"],
+  ["Orangen","kg","Obst"],
+  ["Zitronen","Stück","Obst"],
+  ["Kartoffeln","kg","Gemüse"],
+  ["Zwiebeln","kg","Gemüse"],
+  ["Knoblauch","Stück","Gemüse"],
+  ["Gurke","Stück","Gemüse"],
+  ["Tomaten","kg","Gemüse"],
+  ["Rispentomaten","Packung","Gemüse"],
+  ["Paprika","Stück","Gemüse"],
+  ["Karotten","kg","Gemüse"],
+  ["Brokkoli","Stück","Gemüse"],
+  ["Blumenkohl","Stück","Gemüse"],
+  ["Zucchini","Stück","Gemüse"],
+  ["Aubergine","Stück","Gemüse"],
+  ["Champignons","Packung","Gemüse"],
+  ["Eisbergsalat","Stück","Gemüse"],
+  ["Rucola","Packung","Gemüse"],
+  ["Spinat","Packung","Gemüse"],
+  ["Lauch","Stück","Gemüse"],
+  ["Frühlingszwiebeln","Bund","Gemüse"],
+  ["Petersilie","Bund","Gemüse"],
+  ["Schnittlauch","Bund","Gemüse"],
+  ["Basilikum","Topf","Gemüse"],
+  ["Tiefkühlerbsen","Packung","Gemüse"],
+  ["Hähnchenbrust","kg","Fleisch & Fisch"],
+  ["Hähnchenschenkel","kg","Fleisch & Fisch"],
+  ["Rindfleisch","kg","Fleisch & Fisch"],
+  ["Rindersteak","Stück","Fleisch & Fisch"],
+  ["Schweinefilet","kg","Fleisch & Fisch"],
+  ["Hackfleisch","kg","Fleisch & Fisch"],
+  ["Suppenhuhn","Stück","Fleisch & Fisch"],
+  ["Salami","Packung","Fleisch & Fisch"],
+  ["Schinken","Packung","Fleisch & Fisch"],
+  ["Putenbrustaufschnitt","Packung","Fleisch & Fisch"],
+  ["Leberwurst","Packung","Fleisch & Fisch"],
+  ["Teewurst","Packung","Fleisch & Fisch"],
+  ["Fleischwurst","Packung","Fleisch & Fisch"],
+  ["Wiener Würstchen","Packung","Fleisch & Fisch"],
+  ["Tofu","Packung","Fleisch & Fisch"],
+  ["Räuchertofu","Packung","Fleisch & Fisch"],
+  ["Zander","Stück","Fleisch & Fisch"],
+  ["Kabeljau","Stück","Fleisch & Fisch"],
+  ["Garnelen","Packung","Fleisch & Fisch"],
+  ["Muscheln","Packung","Fleisch & Fisch"],
+  ["Tintenfisch","Packung","Fleisch & Fisch"],
+  ["Lachs","Packung","Fleisch & Fisch"],
+  ["Fischstäbchen","Packung","Fleisch & Fisch"],
+  ["Mehl","kg","Brot & Getreide"],
+  ["Weizenmehl","kg","Brot & Getreide"],
+  ["Roggenmehl","kg","Brot & Getreide"],
+  ["Dinkelmehl","kg","Brot & Getreide"],
+  ["Sojamehl","kg","Brot & Getreide"],
+  ["Nudeln","Packung","Brot & Getreide"],
+  ["Spaghetti","Packung","Brot & Getreide"],
+  ["Makkaroni","Packung","Brot & Getreide"],
+  ["Hartweizennudeln","Packung","Brot & Getreide"],
+  ["Reis","Packung","Brot & Getreide"],
+  ["Basmatireis","Packung","Brot & Getreide"],
+  ["Milchreis","Packung","Brot & Getreide"],
+  ["Haferflocken","Packung","Brot & Getreide"],
+  ["Müsli","Packung","Brot & Getreide"],
+  ["Cornflakes","Packung","Brot & Getreide"],
+  ["Toastbrot","Packung","Brot & Getreide"],
+  ["Couscous","Packung","Brot & Getreide"],
+  ["Linsen","Packung","Konserven & Vorrat"],
+  ["Kichererbsen","Dose","Konserven & Vorrat"],
+  ["Erbsen","Dose","Konserven & Vorrat"],
+  ["Bohnen","Dose","Konserven & Vorrat"],
+  ["Kidneybohnen","Dose","Konserven & Vorrat"],
+  ["Tomatenmark","Tube","Konserven & Vorrat"],
+  ["passierte Tomaten","Packung","Konserven & Vorrat"],
+  ["gehackte Tomaten","Dose","Konserven & Vorrat"],
+  ["Stückige Tomaten","Dose","Konserven & Vorrat"],
+  ["Sardellen","Glas","Konserven & Vorrat"],
+  ["Thunfischdosen","Dose","Konserven & Vorrat"],
+  ["Maisdosen","Dose","Konserven & Vorrat"],
+  ["Gewürzgurken","Glas","Konserven & Vorrat"],
+  ["Kapern","Glas","Konserven & Vorrat"],
+  ["Zucker","kg","Gewürze & Zutaten"],
+  ["Rohrzucker","Packung","Gewürze & Zutaten"],
+  ["brauner Zucker","Packung","Gewürze & Zutaten"],
+  ["Würfelzucker","Packung","Gewürze & Zutaten"],
+  ["Gelierzucker","Packung","Gewürze & Zutaten"],
+  ["Salz","Packung","Gewürze & Zutaten"],
+  ["Pfeffer","Streuer","Gewürze & Zutaten"],
+  ["Paprikapulver","Glas","Gewürze & Zutaten"],
+  ["Currypulver","Glas","Gewürze & Zutaten"],
+  ["Oregano","Glas","Gewürze & Zutaten"],
+  ["Thymian","Glas","Gewürze & Zutaten"],
+  ["Rosmarin","Glas","Gewürze & Zutaten"],
+  ["Muskatnuss","Glas","Gewürze & Zutaten"],
+  ["Zimt","Glas","Gewürze & Zutaten"],
+  ["Nelken","Glas","Gewürze & Zutaten"],
+  ["Lorbeerblätter","Packung","Gewürze & Zutaten"],
+  ["Chilipulver","Glas","Gewürze & Zutaten"],
+  ["Kreuzkümmel","Glas","Gewürze & Zutaten"],
+  ["Korianderpulver","Glas","Gewürze & Zutaten"],
+  ["Kurkuma","Glas","Gewürze & Zutaten"],
+  ["Ingwerpulver","Glas","Gewürze & Zutaten"],
+  ["Olivenöl","Flasche","Gewürze & Zutaten"],
+  ["Sonnenblumenöl","Flasche","Gewürze & Zutaten"],
+  ["Rapsöl","Flasche","Gewürze & Zutaten"],
+  ["Essig","Flasche","Gewürze & Zutaten"],
+  ["Balsamico","Flasche","Gewürze & Zutaten"],
+  ["Hefe","Packung","Gewürze & Zutaten"],
+  ["Trockenhefe","Packung","Gewürze & Zutaten"],
+  ["Backpulver","Packung","Gewürze & Zutaten"],
+  ["Vanillezucker","Packung","Gewürze & Zutaten"],
+  ["Speisestärke","Packung","Gewürze & Zutaten"],
+  ["Paniermehl","Packung","Gewürze & Zutaten"],
+  ["Brühe","Packung","Gewürze & Zutaten"],
+  ["Gemüsebrühe","Packung","Gewürze & Zutaten"],
+  ["Hühnerbrühe","Packung","Gewürze & Zutaten"],
+  ["Rinderbrühe","Packung","Gewürze & Zutaten"],
+  ["Senf","Tube","Gewürze & Zutaten"],
+  ["Ketchup","Flasche","Gewürze & Zutaten"],
+  ["Mayonnaise","Glas","Gewürze & Zutaten"],
+  ["Pinienkerne","Packung","Gewürze & Zutaten"],
+  ["Kürbiskerne","Packung","Gewürze & Zutaten"],
+  ["Sesam","Packung","Gewürze & Zutaten"],
+  ["Kokosraspeln","Packung","Gewürze & Zutaten"],
+  ["Sojasauce","Flasche","Asiatisch"],
+  ["Kokosmilch","Dose","Asiatisch"],
+  ["Currypaste","Glas","Asiatisch"],
+  ["Sojasprossen","Dose","Asiatisch"],
+  ["Bambussprossen","Dose","Asiatisch"],
+  ["Mie-Nudeln","Packung","Asiatisch"],
+  ["Reisnudeln","Packung","Asiatisch"],
+  ["Glasnudeln","Packung","Asiatisch"],
+  ["Wasabi","Tube","Asiatisch"],
+  ["Miso","Glas","Asiatisch"],
+  ["Honig","Glas","Süßes & Snacks"],
+  ["Marmelade","Glas","Süßes & Snacks"],
+  ["Erdbeermarmelade","Glas","Süßes & Snacks"],
+  ["Nuss-Nougat-Creme","Glas","Süßes & Snacks"],
+  ["Walnüsse","Packung","Süßes & Snacks"],
+  ["Haselnüsse","Packung","Süßes & Snacks"],
+  ["Mandeln","Packung","Süßes & Snacks"],
+  ["Cashewkerne","Packung","Süßes & Snacks"],
+  ["Rosinen","Packung","Süßes & Snacks"],
+  ["getrocknete Aprikosen","Packung","Süßes & Snacks"],
+  ["Datteln","Packung","Süßes & Snacks"],
+  ["Kuvertüre","Packung","Süßes & Snacks"],
+  ["Marzipan","Packung","Süßes & Snacks"],
+  ["Puderzucker","Packung","Süßes & Snacks"],
+  ["Gelatine","Packung","Süßes & Snacks"],
+  ["Tortenguss","Packung","Süßes & Snacks"],
+  ["Schokostreusel","Packung","Süßes & Snacks"],
+  ["Mandelsplitter","Packung","Süßes & Snacks"],
+  ["Knabberzeug","Packung","Süßes & Snacks"],
+  ["Chips","Packung","Süßes & Snacks"],
+  ["Paprikachips","Packung","Süßes & Snacks"],
+  ["Tortillachips","Packung","Süßes & Snacks"],
+  ["Salzstangen","Packung","Süßes & Snacks"],
+  ["Erdnussflips","Packung","Süßes & Snacks"],
+  ["Popcorn","Packung","Süßes & Snacks"],
+  ["Erdnüsse","Packung","Süßes & Snacks"],
+  ["Pistazien","Packung","Süßes & Snacks"],
+  ["Macadamianüsse","Packung","Süßes & Snacks"],
+  ["Dips","Becher","Süßes & Snacks"],
+  ["Schokolade","Tafel","Süßes & Snacks"],
+  ["Vollmilchschokolade","Tafel","Süßes & Snacks"],
+  ["Zartbitterschokolade","Tafel","Süßes & Snacks"],
+  ["Gummibärchen","Packung","Süßes & Snacks"],
+  ["Bonbons","Packung","Süßes & Snacks"],
+  ["Kekse","Packung","Süßes & Snacks"],
+  ["Butterkekse","Packung","Süßes & Snacks"],
+  ["Schokokekse","Packung","Süßes & Snacks"],
+  ["Kaffee","Packung","Getränke"],
+  ["Kaffeebohnen","Packung","Getränke"],
+  ["Kaffeepulver","Packung","Getränke"],
+  ["Schwarztee","Packung","Getränke"],
+  ["Früchtetee","Packung","Getränke"],
+  ["Kamillentee","Packung","Getränke"],
+  ["Kakao","Packung","Getränke"],
+  ["Kakaopulver","Packung","Getränke"],
+  ["Mineralwasser","Kiste","Getränke"],
+  ["Stilles Wasser","Kiste","Getränke"],
+  ["Apfelsaft","Liter","Getränke"],
+  ["Orangensaft","Liter","Getränke"],
+  ["Traubensaft","Liter","Getränke"],
+  ["Limonade","Flasche","Getränke"],
+  ["Cola","Flasche","Getränke"],
+  ["Eistee","Flasche","Getränke"],
+  ["Energydrink","Dose","Getränke"],
+  ["Tonic Water","Flasche","Getränke"],
+  ["Ginger Ale","Flasche","Getränke"],
+  ["Bitter Lemon","Flasche","Getränke"],
+  ["Bier","Kiste","Getränke"],
+  ["Pils","Kiste","Getränke"],
+  ["Weizenbier","Kiste","Getränke"],
+  ["Rotwein","Flasche","Getränke"],
+  ["Weißwein","Flasche","Getränke"],
+  ["Apfelwein","Flasche","Getränke"],
+  ["Glühwein","Flasche","Getränke"],
+  ["Sekt","Flasche","Getränke"],
+  ["Rum","Flasche","Getränke"],
+  ["Wodka","Flasche","Getränke"],
+  ["Gin","Flasche","Getränke"],
+  ["Cognac","Flasche","Getränke"],
+  ["Whiskey","Flasche","Getränke"],
+  ["Likör","Flasche","Getränke"],
+  ["Amaretto","Flasche","Getränke"],
+  ["Baileys","Flasche","Getränke"],
+  ["Spülmittel","Flasche","Putzmittel"],
+  ["Klarspüler","Flasche","Putzmittel"],
+  ["Spülmaschinentabs","Packung","Putzmittel"],
+  ["Spülmaschinensalz","Packung","Putzmittel"],
+  ["Maschinenpfleger","Flasche","Putzmittel"],
+  ["Allzweckreiniger","Flasche","Putzmittel"],
+  ["Glasreiniger","Flasche","Putzmittel"],
+  ["Badreiniger","Flasche","Putzmittel"],
+  ["Essigreiniger","Flasche","Putzmittel"],
+  ["WC-Reiniger","Flasche","Putzmittel"],
+  ["Toilettenstein","Stück","Putzmittel"],
+  ["Scheuermilch","Flasche","Putzmittel"],
+  ["Bodenreiniger","Flasche","Putzmittel"],
+  ["Rohrreiniger","Flasche","Putzmittel"],
+  ["Entkalker","Flasche","Putzmittel"],
+  ["Fettlöser","Flasche","Putzmittel"],
+  ["Waschmittel","Packung","Putzmittel"],
+  ["Vollwaschmittel","Packung","Putzmittel"],
+  ["Colorwaschmittel","Packung","Putzmittel"],
+  ["Feinwaschmittel","Packung","Putzmittel"],
+  ["Wollwaschmittel","Packung","Putzmittel"],
+  ["Weichspüler","Flasche","Putzmittel"],
+  ["Fleckenspray","Flasche","Putzmittel"],
+  ["Gallseife","Stück","Putzmittel"],
+  ["Wäschenetz","Stück","Putzmittel"],
+  ["Putzlappen","Packung","Putzmittel"],
+  ["Mikrofasertuch","Stück","Putzmittel"],
+  ["Staubtuch","Packung","Putzmittel"],
+  ["Schwamm","Stück","Putzmittel"],
+  ["Topfkratzer","Stück","Putzmittel"],
+  ["Stahlschwamm","Stück","Putzmittel"],
+  ["Flaschenbürste","Stück","Putzmittel"],
+  ["Staubsaugerbeutel","Packung","Putzmittel"],
+  ["Staubsaugerfilter","Stück","Putzmittel"],
+  ["Besen","Stück","Putzmittel"],
+  ["Handfeger","Stück","Putzmittel"],
+  ["Kehrblech","Stück","Putzmittel"],
+  ["Wischmopp","Stück","Putzmittel"],
+  ["Eimer","Stück","Putzmittel"],
+  ["Staubwedel","Stück","Putzmittel"],
+  ["Fensterabzieher","Stück","Putzmittel"],
+  ["Bürste","Stück","Putzmittel"],
+  ["Schrubber","Stück","Putzmittel"],
+  ["Feuchttücher","Packung","Hygiene"],
+  ["feuchtes Toilettenpapier","Packung","Hygiene"],
+  ["Duschgel","Flasche","Hygiene"],
+  ["Seife","Stück","Hygiene"],
+  ["Flüssigseife","Flasche","Hygiene"],
+  ["Handseife","Flasche","Hygiene"],
+  ["Kernseife","Stück","Hygiene"],
+  ["Shampoo","Flasche","Hygiene"],
+  ["Haarspülung","Flasche","Hygiene"],
+  ["Haarkur","Packung","Hygiene"],
+  ["Trockenshampoo","Dose","Hygiene"],
+  ["Haarspray","Dose","Hygiene"],
+  ["Haargel","Tube","Hygiene"],
+  ["Deodorant","Stück","Hygiene"],
+  ["Deo-Roller","Stück","Hygiene"],
+  ["Deo-Spray","Dose","Hygiene"],
+  ["Rasierschaum","Dose","Hygiene"],
+  ["Rasiergel","Tube","Hygiene"],
+  ["Einwegrasierer","Packung","Hygiene"],
+  ["Rasierklingen","Packung","Hygiene"],
+  ["Aftershave","Flasche","Hygiene"],
+  ["Zahnbürste","Stück","Hygiene"],
+  ["elektrische Zahnbürste","Stück","Hygiene"],
+  ["Aufsteckbürsten","Packung","Hygiene"],
+  ["Zahnpasta","Tube","Hygiene"],
+  ["Zahnseide","Packung","Hygiene"],
+  ["Interdentalbürsten","Packung","Hygiene"],
+  ["Mundspülung","Flasche","Hygiene"],
+  ["Wattestäbchen","Packung","Hygiene"],
+  ["Wattepads","Packung","Hygiene"],
+  ["Papiertaschentücher","Packung","Hygiene"],
+  ["Binden","Packung","Hygiene"],
+  ["Slipeinlagen","Packung","Hygiene"],
+  ["Tampons","Packung","Hygiene"],
+  ["Menstruationstasse","Stück","Hygiene"],
+  ["Kondome","Packung","Hygiene"],
+  ["Gleitgel","Tube","Hygiene"],
+  ["Bodylotion","Flasche","Kosmetik"],
+  ["Körperöl","Flasche","Kosmetik"],
+  ["Gesichtscreme","Tube","Kosmetik"],
+  ["Handcreme","Tube","Kosmetik"],
+  ["Fußcreme","Tube","Kosmetik"],
+  ["Sonnencreme","Tube","Kosmetik"],
+  ["Abschminktücher","Packung","Kosmetik"],
+  ["Pinzette","Stück","Kosmetik"],
+  ["Nagelschere","Stück","Kosmetik"],
+  ["Nagelknipser","Stück","Kosmetik"],
+  ["Nagelfeile","Stück","Kosmetik"],
+  ["Bimsstein","Stück","Kosmetik"],
+  ["Hornhautraspel","Stück","Kosmetik"],
+  ["Haarbürste","Stück","Kosmetik"],
+  ["Kamm","Stück","Kosmetik"],
+  ["Haargummis","Packung","Kosmetik"],
+  ["Haarspangen","Packung","Kosmetik"],
+  ["Lippenpflege","Stück","Kosmetik"],
+  ["Lippenbalsam","Stück","Kosmetik"],
+  ["Pflaster","Packung","Gesundheit"],
+  ["Blasenpflaster","Packung","Gesundheit"],
+  ["Verbandszeug","Packung","Gesundheit"],
+  ["Desinfektionsmittel","Flasche","Gesundheit"],
+  ["Fieberthermometer","Stück","Gesundheit"],
+  ["Schmerzmittel","Packung","Gesundheit"],
+  ["Kopfschmerztabletten","Packung","Gesundheit"],
+  ["Hustensaft","Flasche","Gesundheit"],
+  ["Nasenspray","Flasche","Gesundheit"],
+  ["Halstabletten","Packung","Gesundheit"],
+  ["Ohropax","Packung","Gesundheit"],
+  ["Kontaktlinsen","Packung","Gesundheit"],
+  ["Kontaktlinsenflüssigkeit","Flasche","Gesundheit"],
+  ["Kochsalzlösung","Flasche","Gesundheit"],
+  ["Augentropfen","Flasche","Gesundheit"],
+  ["Vitamintabletten","Packung","Gesundheit"],
+  ["Erkältungstee","Packung","Gesundheit"],
+  ["Wärmepflaster","Packung","Gesundheit"],
+  ["Kirschkernkissen","Stück","Gesundheit"],
+  ["Wärmflasche","Stück","Gesundheit"],
+  ["Schwangerschaftstest","Stück","Gesundheit"],
+  ["Hundefutter","kg","Tierbedarf"],
+  ["Katzenfutter","kg","Tierbedarf"],
+  ["Katzenstreu","Packung","Tierbedarf"],
+  ["Vogelfutter","Packung","Tierbedarf"],
+  ["Meisenknödel","Packung","Tierbedarf"],
+  ["Fischfutter","Dose","Tierbedarf"],
+  ["Klopapier","Packung",null],
+  ["Küchenrolle","Rolle",null],
+  ["Toilettenpapier","Packung",null],
+  ["Eier","10er Pack",null],
+  ["Müllbeutel","Rolle",null],
+  ["Restmüllbeutel","Rolle",null],
+  ["Biomüllbeutel","Rolle",null],
+  ["Gelber Sack","Rolle",null],
+  ["Abfalleimer","Stück",null],
+  ["Komposteimer","Stück",null],
+  ["Backpapier","Rolle",null],
+  ["Alufolie","Rolle",null],
+  ["Frischhaltefolie","Rolle",null],
+  ["Butterbrotpapier","Packung",null],
+  ["Vorratsdose","Stück",null],
+  ["Tupperdose","Stück",null],
+  ["Servietten","Packung",null],
+  ["Streichhölzer","Packung",null],
+  ["Feuerzeug","Stück",null],
+  ["Teelichter","Packung",null],
+  ["Kerzen","Stück",null],
+  ["Batterien","Packung",null],
+  ["Glühbirnen","Stück",null],
+  ["Wäscheständer","Stück",null],
+  ["Wäschekorb","Stück",null],
+  ["Wäscheklammern","Packung",null],
+  ["Bügelbrettbezug","Stück",null],
+  ["Klebeband","Rolle",null],
+  ["Paketband","Rolle",null],
+  ["Isolierband","Rolle",null],
+  ["Thermoskanne","Stück",null],
+  ["Blumenerde","Packung",null],
+  ["Pflanzendünger","Flasche",null],
+  ["Tiefkühlpizza","Stück",null],
+  ["Pommes frites","Packung",null],
+  ["Speiseeis","Packung",null],
+  ["Kaffeefilter","Packung",null],
 ].map(([name, unit, group]) => ({ name, unit, group }));
 
 // Feste Anzeige-Reihenfolge der Themen-Gruppen im Vorrat.
 const GROUP_ORDER = [
   "Obst", "Gemüse", "Milchprodukte", "Fleisch & Fisch", "Brot & Getreide",
-  "Konserven & Vorrat", "Gewürze & Zutaten", "Süßes & Snacks", "Getränke",
-  "Putzmittel", "Hygiene", "Kosmetik",
+  "Konserven & Vorrat", "Gewürze & Zutaten", "Asiatisch", "Süßes & Snacks", "Getränke",
+  "Putzmittel", "Hygiene", "Kosmetik", "Gesundheit", "Tierbedarf",
 ];
 
 // Fallback-Stichwörter für Artikel, die nicht exakt im Katalog stehen
@@ -104,13 +485,17 @@ const FALLBACK_KEYWORDS = [
   { group: "Obst", words: ["apfel", "äpfel", "banane", "zitrone", "orange", "traube", "beere", "birne", "mandarine", "kiwi", "melone", "pfirsich", "mango", "ananas"] },
   { group: "Gemüse", words: ["kartoffel", "zwiebel", "knoblauch", "tomate", "gurke", "paprika", "karotte", "salat", "brokkoli", "spinat", "pilz", "zucchini", "möhre"] },
   { group: "Fleisch & Fisch", words: ["hackfleisch", "hähnchen", "fisch", "wurst", "schinken", "speck", "filet"] },
-  { group: "Brot & Getreide", words: ["brot", "brötchen", "mehl", "nudel", "reis", "müsli", "haferflocken", "toast"] },
-  { group: "Konserven & Vorrat", words: ["dose", "konserve"] },
-  { group: "Süßes & Snacks", words: ["schokolade", "keks", "gummibär", "chips", "süßigkeit"] },
-  { group: "Getränke", words: ["wasser", "saft", "bier", "wein", "limonade", "cola"] },
-  { group: "Putzmittel", words: ["reiniger", "spülmittel", "waschmittel", "weichspüler"] },
+  { group: "Brot & Getreide", words: ["brot", "brötchen", "mehl", "reis", "müsli", "haferflocken", "toast", "couscous"] },
+  { group: "Konserven & Vorrat", words: ["dose", "konserve", "linsen", "bohnen"] },
+  { group: "Gewürze & Zutaten", words: ["gewürz", "pfeffer", "öl ", "essig"] },
+  { group: "Asiatisch", words: ["soja", "curry", "wasabi", "miso", "mie-nudel", "reisnudel", "glasnudel"] },
+  { group: "Süßes & Snacks", words: ["schokolade", "keks", "gummibär", "chips", "süßigkeit", "nuss", "nüsse"] },
+  { group: "Getränke", words: ["wasser", "saft", "bier", "wein", "limonade", "cola", "kaffee", "tee"] },
+  { group: "Putzmittel", words: ["reiniger", "spülmittel", "waschmittel", "weichspüler", "putz"] },
   { group: "Hygiene", words: ["zahnpasta", "zahnbürste", "duschgel", "shampoo", "deo", "rasier", "seife", "tampon", "binde"] },
   { group: "Kosmetik", words: ["creme", "sonnencreme", "lotion", "parfum", "makeup"] },
+  { group: "Gesundheit", words: ["schmerz", "pflaster", "erkältung", "fieber", "desinfekt", "tablette"] },
+  { group: "Tierbedarf", words: ["hundefutter", "katzenfutter", "katzenstreu", "vogelfutter", "tierfutter"] },
 ];
 
 // Ordnet einen Artikelnamen automatisch einer Themen-Gruppe zu, oder null,
@@ -239,10 +624,30 @@ function showScreen(id) {
   $(id).classList.remove("hidden");
 }
 
-function switchTab(tab) {
+// ───────────────────────── Zurück-Navigation (Android-Taste) ─────────────────────────
+// Öffnet man einen Tab (außer Vorrat) oder ein Modal, legen wir einen
+// Verlaufseintrag an. Drückt man danach "Zurück", schließen wir stattdessen
+// nur das Modal bzw. springen zurück zum Vorrat, statt die ganze App zu
+// verlassen. Ohne das würde Android die App beenden.
+function pushAppHistory() {
+  try { history.pushState({ stashNav: true }, ""); } catch { /* z. B. in manchen eingebetteten Webviews nicht erlaubt */ }
+}
+
+function handleBackNavigation() {
+  if (!$("modal-scanner").classList.contains("hidden")) { closeScanner(true); return; }
+  if (!$("modal-item").classList.contains("hidden")) { closeItemModal(true); return; }
+  if (!$("modal-account").classList.contains("hidden")) { $("modal-account").classList.add("hidden"); return; }
+  if ($("tab-vorrat").classList.contains("hidden")) { switchTab("vorrat", false); return; }
+  // Bereits auf der Vorrat-Übersicht ohne offenes Modal: nichts weiter zu tun,
+  // der Browser/das Betriebssystem übernimmt die eigentliche Zurück-Aktion.
+}
+window.addEventListener("popstate", handleBackNavigation);
+
+function switchTab(tab, pushHistory = true) {
   document.querySelectorAll(".tabpanel").forEach((p) => p.classList.add("hidden"));
   $("tab-" + tab).classList.remove("hidden");
   document.querySelectorAll(".navbtn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  if (pushHistory && tab !== "vorrat") pushAppHistory();
 }
 
 // ───────────────────────── Auth ─────────────────────────
@@ -727,9 +1132,10 @@ function openItemModal(id) {
   $("item-autodecrement").checked = !!item.autoDecrement;
   $("item-autodecrement-status").textContent = formatAutoStatus(item);
   $("modal-item").classList.remove("hidden");
+  pushAppHistory();
 }
 
-function closeItemModal() {
+function closeItemModal(fromPopState = false) {
   $("modal-item").classList.add("hidden");
   currentEditId = null;
 }
@@ -875,6 +1281,7 @@ function wireHouseholdScreen() {
 async function openScanner(onResult) {
   $("scanner-status").textContent = "Kamera wird gestartet…";
   $("modal-scanner").classList.remove("hidden");
+  pushAppHistory();
 
   if (!("BarcodeDetector" in window)) {
     $("scanner-status").textContent = "Barcode-Scan wird auf diesem Gerät/Browser nicht unterstützt. Bitte Namen manuell eingeben.";
@@ -921,7 +1328,7 @@ async function openScanner(onResult) {
   requestAnimationFrame(loop);
 }
 
-function closeScanner() {
+function closeScanner(fromPopState = false) {
   scannerActive = false;
   if (scannerStream) {
     scannerStream.getTracks().forEach((t) => t.stop());
@@ -973,7 +1380,7 @@ async function handleScannedBarcode(code) {
 function wireMainScreen() {
   document.querySelectorAll(".navbtn").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
 
-  $("btn-account").addEventListener("click", () => $("modal-account").classList.remove("hidden"));
+  $("btn-account").addEventListener("click", () => { $("modal-account").classList.remove("hidden"); pushAppHistory(); });
   $("modal-account-close").addEventListener("click", () => $("modal-account").classList.add("hidden"));
   $("account-copy-code").addEventListener("click", () => copyText(state.joinCode));
   $("btn-signout").addEventListener("click", () => { $("modal-account").classList.add("hidden"); signOut(auth); });
@@ -1041,6 +1448,12 @@ function wireMainScreen() {
   );
   $("form-new-item").addEventListener("submit", submitNewItem);
   $("btn-scan-new").addEventListener("click", () => openScanner(handleScannedBarcode));
+  $("btn-quicktrack-toggle").addEventListener("click", () => {
+    const panel = $("quicktrack-panel");
+    panel.classList.toggle("hidden");
+    if (!panel.classList.contains("hidden")) $("quicktrack-input").focus();
+  });
+  $("quicktrack-submit").addEventListener("click", submitQuickTrack);
   $("scanner-close").addEventListener("click", closeScanner);
 
   document.addEventListener("click", (e) => {
@@ -1095,6 +1508,86 @@ function wireMainScreen() {
     await deleteDoc(itemRef(currentEditId));
     closeItemModal();
   });
+}
+
+// ───────────────────────── Schnell erfassen (Massenerfassung) ─────────────────────────
+// Erwartetes Format: Zahl direkt vor jedem Gegenstand, Rest ist beliebig -
+// "2 Zahnpasta 3 Schwamm 4 Nudeln" oder mit Kommas/Zeilenumbrüchen, völlig egal.
+// Auch für Diktierfunktionen der Tastatur gedacht, deshalb werden gängige
+// Füllwörter beim Zusammendiktieren ("und", "sowie" ...) einfach ignoriert.
+const QUICKTRACK_STOPWORDS = new Set(["und", "sowie", "ausserdem", "auch", "noch", "plus", "dazu", "x"]);
+
+function parseQuickTrack(text) {
+  const tokens = text
+    .replace(/(\d),(\d)/g, "$1.$2") // Dezimalkomma schützen, bevor Kommas als Trenner gelten
+    .replace(/[,;\n]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  const numRe = /^\d+([.,]\d+)?x?$/i;
+  const entries = [];
+  let current = null;
+  for (const tok of tokens) {
+    if (numRe.test(tok)) {
+      if (current && current.words.length) entries.push(current);
+      const qty = parseFloat(tok.replace(",", ".").replace(/x$/i, ""));
+      current = { qty, words: [] };
+      continue;
+    }
+    if (!current) continue; // Text vor der ersten Zahl wird ignoriert
+    if (QUICKTRACK_STOPWORDS.has(normalize(tok))) continue;
+    current.words.push(tok);
+  }
+  if (current && current.words.length) entries.push(current);
+  return entries
+    .map((e) => ({ qty: e.qty, name: e.words.join(" ") }))
+    .filter((e) => e.name && isFinite(e.qty) && e.qty >= 0);
+}
+
+async function submitQuickTrack() {
+  const raw = $("quicktrack-input").value.trim();
+  if (!raw) return;
+  const entries = parseQuickTrack(raw);
+  if (!entries.length) {
+    $("quicktrack-result").textContent = 'Konnte nichts erkennen. Format: Zahl vor dem Namen, z. B. „2 Zahnpasta 3 Schwamm".';
+    $("quicktrack-result").classList.remove("hidden");
+    return;
+  }
+
+  $("quicktrack-submit").disabled = true;
+  let created = 0, updated = 0;
+  for (const { qty, name } of entries) {
+    const existing = state.items.find((it) => normalize(it.name) === normalize(name));
+    if (existing) {
+      await updateDoc(itemRef(existing.id), {
+        stock: Math.max(0, roundHalf(qty)),
+        active: true, snoozed: false, forced: false,
+        updatedAt: serverTimestamp(), updatedBy: state.uid, autoLastAppliedAt: Date.now(),
+      });
+      updated++;
+    } else {
+      const catalogMatch = CATALOG.find((c) => normalize(c.name) === normalize(name));
+      await addDoc(collection(db, "households", state.householdId, "items"), {
+        name, nameLower: normalize(name),
+        unit: catalogMatch ? catalogMatch.unit : "Stück",
+        location: "",
+        barcode: null,
+        stock: Math.max(0, roundHalf(qty)),
+        minStock: 1, targetStock: Math.max(2, Math.ceil(qty)),
+        staple: false, active: true, showInVorrat: true, oneOff: false, forced: false, snoozed: false,
+        lastBought: null, buyCount: 0,
+        autoDecrement: false, intervalSamples: [], lastDecrementAt: null, avgIntervalMs: null, autoLastAppliedAt: null,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: state.uid,
+      });
+      created++;
+    }
+  }
+  $("quicktrack-submit").disabled = false;
+
+  $("quicktrack-input").value = "";
+  $("quicktrack-result").textContent = `${entries.length} Artikel verarbeitet: ${created} neu angelegt, ${updated} aktualisiert.`;
+  $("quicktrack-result").classList.remove("hidden");
+  showToast(`${entries.length} Artikel erfasst`);
+  switchTab("vorrat");
 }
 
 async function submitQuickAdd() {

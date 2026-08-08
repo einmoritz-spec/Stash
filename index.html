@@ -119,10 +119,24 @@
 
       <!-- Neu -->
       <div id="tab-neu" class="tabpanel hidden">
-        <button type="button" class="btn btn-secondary scan-btn" id="btn-scan-new">
-          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 4h4v2H6v2H4V4Zm0 14v-4h2v2h2v2H4ZM16 4h4v4h-2V6h-2V4Zm4 14h-4v-2h2v-2h2v4ZM9 8h1v8H9V8Zm2 0h2v8h-2V8Zm3 0h1v8h-1V8Zm2 0h2v8h-2V8Z"/></svg>
-          Barcode scannen
-        </button>
+        <div class="quick-actions-row">
+          <button type="button" class="btn btn-secondary scan-btn" id="btn-scan-new">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 4h4v2H6v2H4V4Zm0 14v-4h2v2h2v2H4ZM16 4h4v4h-2V6h-2V4Zm4 14h-4v-2h2v-2h2v4ZM9 8h1v8H9V8Zm2 0h2v8h-2V8Zm3 0h1v8h-1V8Zm2 0h2v8h-2V8Z"/></svg>
+            Barcode scannen
+          </button>
+          <button type="button" class="btn btn-secondary scan-btn" id="btn-quicktrack-toggle">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25ZM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
+            Schnell erfassen
+          </button>
+        </div>
+
+        <div id="quicktrack-panel" class="quicktrack-panel hidden">
+          <p class="hint quicktrack-intro">Anzahl vor jeden Gegenstand, Rest ist egal – z. B. „2 Zahnpasta 3 Schwamm 4 Nudeln". Geht auch per Diktierfunktion deiner Tastatur.</p>
+          <textarea id="quicktrack-input" rows="3" placeholder="z. B. 2 Zahnpasta 3 Schwamm 4 Nudeln"></textarea>
+          <button type="button" class="btn btn-primary" id="quicktrack-submit">Übernehmen</button>
+          <p id="quicktrack-result" class="hint quicktrack-result hidden"></p>
+        </div>
+
         <form id="form-new-item" class="stack">
           <label class="field">
             <span>Name</span>
