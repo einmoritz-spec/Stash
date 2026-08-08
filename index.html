@@ -90,12 +90,7 @@
       <div id="tab-vorrat" class="tabpanel">
         <div class="toolbar">
           <input type="search" id="vorrat-search" class="search-input" placeholder="Vorrat durchsuchen…" />
-          <div class="chips" id="vorrat-filters">
-            <button class="chip active" data-filter="alle">Alle</button>
-            <button class="chip" data-filter="essen">Essen</button>
-            <button class="chip" data-filter="haushalt">Haushalt</button>
-            <button class="chip" data-filter="fehlt">Fehlt</button>
-          </div>
+          <div class="chips" id="vorrat-filters"></div>
         </div>
         <div id="vorrat-list" class="item-list"></div>
         <p id="vorrat-empty" class="empty-state hidden">Noch nichts im Vorrat. Leg unter „Neu" euren ersten Artikel an.</p>
@@ -154,6 +149,11 @@
           <label class="field">
             <span>Zielbestand (wie viel beim Nachkauf)</span>
             <input type="number" id="new-target" value="2" min="0" step="0.5" inputmode="decimal" />
+          </label>
+
+          <label class="field">
+            <span>Lagerort (optional)</span>
+            <input type="text" id="new-location" list="location-list" placeholder="z. B. Keller, Küche, Bad" />
           </label>
 
           <label class="switch-row">
@@ -242,16 +242,30 @@
         </label>
       </div>
 
+      <label class="field">
+        <span>Lagerort (optional)</span>
+        <input type="text" id="item-location" list="location-list" placeholder="z. B. Keller, Küche, Bad" />
+      </label>
+
       <label class="switch-row">
         <span>Dauerartikel (immer anzeigen)</span>
         <input type="checkbox" id="item-staple" />
       </label>
+
+      <div class="auto-block">
+        <label class="switch-row">
+          <span>Automatisch verbrauchen</span>
+          <input type="checkbox" id="item-autodecrement" />
+        </label>
+        <p class="hint auto-hint" id="item-autodecrement-status"></p>
+      </div>
 
       <button class="btn btn-ghost danger" id="item-archive">Artikel archivieren</button>
     </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>
+  <datalist id="location-list"></datalist>
 </div>
 
 <script src="./firebase-config.js"></script>

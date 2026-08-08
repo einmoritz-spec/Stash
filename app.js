@@ -228,6 +228,7 @@ function subscribeItems(hid) {
     (snap) => {
       state.items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       renderAll();
+      runAutoDecrementCheck();
     },
     (err) => {
       console.error("Sync-Fehler", err);
@@ -236,24 +237,98 @@ function subscribeItems(hid) {
   );
 }
 
-async function adjustStock(itemId, delta) {
+// Baut aus den letzten Verbrauchs-Intervallen (Zeit zwischen zwei "−"-Klicks)
+// die Felder, die für die Durchschnittsberechnung nötig sind.
+// Erst ab 2 gemessenen Intervallen (= 3 Klicks) gibt es einen Durchschnitt.
+function buildTrackingFields(cur, now) {
+  const samples = Array.isArray(cur.intervalSamples) ? [...cur.intervalSamples] : [];
+  if (cur.lastDecrementAt) {
+    const interval = now - cur.lastDecrementAt;
+    if (interval > 0) {
+      samples.push(interval);
+      if (samples.length > 5) samples.shift();
+    }
+  }
+  const fields = { intervalSamples: samples, lastDecrementAt: now };
+  if (samples.length >= 2) {
+    fields.avgIntervalMs = Math.round(samples.reduce((a, b) => a + b, 0) / samples.length);
+  }
+  return fields;
+}
+
+async function adjustStock(itemId, delta, { track = false } = {}) {
   const ref = itemRef(itemId);
+  const now = Date.now();
   try {
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(ref);
       if (!snap.exists()) return;
-      const cur = snap.data().stock || 0;
-      const next = Math.max(0, roundHalf(cur + delta));
-      tx.update(ref, { stock: next, snoozed: false, updatedAt: serverTimestamp(), updatedBy: state.uid });
+      const cur = snap.data();
+      const next = Math.max(0, roundHalf((cur.stock || 0) + delta));
+      const update = {
+        stock: next,
+        snoozed: false,
+        updatedAt: serverTimestamp(),
+        updatedBy: state.uid,
+        autoLastAppliedAt: now, // jede manuelle Änderung startet die Auto-Uhr neu
+      };
+      if (track && delta < 0) Object.assign(update, buildTrackingFields(cur, now));
+      tx.update(ref, update);
     });
   } catch (err) {
     console.error(err);
   }
 }
 
+// Prüft alle Artikel mit aktiviertem Auto-Verbrauch: Wie viele durchschnittliche
+// Intervalle sind seit der letzten (echten oder automatischen) Änderung vergangen?
+// Zieht entsprechend viele ganze Einheiten ab. Läuft periodisch im Hintergrund,
+// nicht als Server-Cron - deshalb wirkt sie beim nächsten App-Öffnen nachträglich.
+let autoDecrementRunning = false;
+async function runAutoDecrementCheck() {
+  if (autoDecrementRunning || !state.householdId) return;
+  autoDecrementRunning = true;
+  try {
+    const now = Date.now();
+    for (const item of state.items) {
+      if (!item.autoDecrement || !item.avgIntervalMs || item.active === false) continue;
+      const base = item.autoLastAppliedAt || item.lastDecrementAt;
+      if (!base || (item.stock || 0) <= 0) continue;
+      const units = Math.floor((now - base) / item.avgIntervalMs);
+      if (units < 1) continue;
+
+      const ref = itemRef(item.id);
+      try {
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(ref);
+          if (!snap.exists()) return;
+          const cur = snap.data();
+          if (!cur.autoDecrement || !cur.avgIntervalMs) return;
+          const curBase = cur.autoLastAppliedAt || cur.lastDecrementAt;
+          if (!curBase) return;
+          const curUnits = Math.floor((now - curBase) / cur.avgIntervalMs);
+          if (curUnits < 1 || (cur.stock || 0) <= 0) return;
+          const dec = Math.min(curUnits, cur.stock || 0);
+          tx.update(ref, {
+            stock: Math.max(0, roundHalf((cur.stock || 0) - dec)),
+            autoLastAppliedAt: curBase + curUnits * cur.avgIntervalMs,
+            updatedAt: serverTimestamp(),
+          });
+        });
+      } catch (err) {
+        console.error("Auto-Verbrauch fehlgeschlagen für", item.name, err);
+      }
+    }
+  } finally {
+    autoDecrementRunning = false;
+  }
+}
+
 async function setStockAbsolute(itemId, value) {
   const v = Math.max(0, roundHalf(parseFloat(value) || 0));
-  await updateDoc(itemRef(itemId), { stock: v, snoozed: false, updatedAt: serverTimestamp(), updatedBy: state.uid });
+  await updateDoc(itemRef(itemId), {
+    stock: v, snoozed: false, updatedAt: serverTimestamp(), updatedBy: state.uid, autoLastAppliedAt: Date.now(),
+  });
 }
 
 async function commitBuy(itemId, qty) {
@@ -279,6 +354,7 @@ async function commitBuy(itemId, qty) {
         buyCount: (cur.buyCount || 0) + 1,
         updatedAt: serverTimestamp(),
         updatedBy: state.uid,
+        autoLastAppliedAt: Date.now(),
       });
     });
   } catch (err) {
@@ -323,7 +399,7 @@ function itemRowHtml(item) {
     <div class="gauge"><div class="gauge-fill ${status}" style="height:${pct}%"></div></div>
     <div class="item-main">
       <div class="item-name">${item.staple ? '<span class="staple-pin">📌</span> ' : ""}${esc(item.name)}</div>
-      <div class="item-meta">${item.unit ? esc(item.unit) : ""} · ${catLabel}</div>
+      <div class="item-meta">${item.unit ? esc(item.unit) : ""} · ${catLabel}${item.location ? " · " + esc(item.location) : ""}${item.autoDecrement ? ' <span class="auto-pin" title="Automatischer Verbrauch aktiv">⏱</span>' : ""}</div>
     </div>
     <button class="round-btn" data-action="minus" data-id="${item.id}" aria-label="Weniger">−</button>
     <button class="item-stock-tap" data-action="open" data-id="${item.id}">${formatQty(item.stock)}</button>
@@ -331,7 +407,30 @@ function itemRowHtml(item) {
   </div>`;
 }
 
+function distinctLocations() {
+  const locs = new Set(["Keller"]); // soll laut Anforderung immer verfügbar sein
+  state.items.forEach((it) => { if (it.location) locs.add(it.location); });
+  return [...locs].sort((a, b) => a.localeCompare(b, "de"));
+}
+
+function refreshLocationDatalist() {
+  $("location-list").innerHTML = distinctLocations().map((l) => `<option value="${esc(l)}"></option>`).join("");
+}
+
+function renderFilterChips() {
+  const base = [["alle", "Alle"], ["essen", "Essen"], ["haushalt", "Haushalt"], ["fehlt", "Fehlt"]];
+  const locChips = distinctLocations().map((l) => ["loc:" + l, l]);
+  const all = [...base, ...locChips];
+  // Falls der aktuell aktive Lagerort-Filter nicht mehr existiert, zurück auf "Alle"
+  if (!all.some(([val]) => val === state.vorratFilter)) state.vorratFilter = "alle";
+  $("vorrat-filters").innerHTML = all
+    .map(([val, label]) => `<button class="chip${state.vorratFilter === val ? " active" : ""}" data-filter="${esc(val)}">${esc(label)}</button>`)
+    .join("");
+}
+
 function renderVorrat() {
+  renderFilterChips();
+  refreshLocationDatalist();
   const q = normalize($("vorrat-search").value);
   const filter = state.vorratFilter;
   const allActive = state.items.filter((it) => it.active !== false);
@@ -345,7 +444,8 @@ function renderVorrat() {
 
   let items = allActive.filter((it) => it.showInVorrat !== false);
   if (filter === "essen" || filter === "haushalt") items = items.filter((it) => it.category === filter);
-  if (filter === "fehlt") items = items.filter((it) => computeStatus(it) !== "good");
+  else if (filter === "fehlt") items = items.filter((it) => computeStatus(it) !== "good");
+  else if (filter.startsWith("loc:")) items = items.filter((it) => it.location === filter.slice(4));
   if (q) items = items.filter((it) => normalize(it.name).includes(q));
 
   items.sort((a, b) => {
@@ -453,6 +553,26 @@ function handleCheckToggle(itemId) {
 }
 
 // ───────────────────────── Item-Modal ─────────────────────────
+function formatAutoStatus(item) {
+  const samples = Array.isArray(item.intervalSamples) ? item.intervalSamples : [];
+  if (samples.length < 2 || !item.avgIntervalMs) {
+    return `Noch nicht genug Messwerte (${samples.length} von 2 gemessenen Zeitspannen). Jedes Mal, wenn du „−" drückst, merkt sich die App, wie lange der Vorrat gehalten hat.`;
+  }
+  const days = item.avgIntervalMs / 86400000;
+  const daysLabel = days < 1 ? `${Math.round(item.avgIntervalMs / 3600000)} Std.` : `${roundHalf(days)} Tagen`;
+  let text = `Ø wird alle ${daysLabel} um 1 verbraucht.`;
+  if (item.autoDecrement) {
+    const base = item.autoLastAppliedAt || item.lastDecrementAt || Date.now();
+    const remainingMs = base + item.avgIntervalMs - Date.now();
+    const remainingDays = Math.max(0, remainingMs / 86400000);
+    const remainingLabel = remainingDays < 1 ? `${Math.max(0, Math.round(remainingMs / 3600000))} Std.` : `${roundHalf(remainingDays)} Tagen`;
+    text += ` Nächster automatischer Abzug in etwa ${remainingLabel}.`;
+  } else {
+    text += ` Automatik ist ausgeschaltet.`;
+  }
+  return text;
+}
+
 function openItemModal(id) {
   const item = state.items.find((i) => i.id === id);
   if (!item) return;
@@ -464,7 +584,10 @@ function openItemModal(id) {
   $("item-target").value = item.targetStock ?? 2;
   $("item-category").value = item.category || "essen";
   $("item-unit").value = item.unit || "";
+  $("item-location").value = item.location || "";
   $("item-staple").checked = !!item.staple;
+  $("item-autodecrement").checked = !!item.autoDecrement;
+  $("item-autodecrement-status").textContent = formatAutoStatus(item);
   $("modal-item").classList.remove("hidden");
 }
 
@@ -480,6 +603,7 @@ function refreshOpenModalIfNeeded() {
   if (document.activeElement !== $("item-stock-value")) {
     $("item-stock-value").value = formatQty(item.stock || 0);
   }
+  $("item-autodecrement-status").textContent = formatAutoStatus(item);
 }
 
 function renderAll() {
@@ -614,20 +738,18 @@ function wireMainScreen() {
 
   // Vorrat
   $("vorrat-search").addEventListener("input", renderVorrat);
-  document.querySelectorAll("#vorrat-filters .chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      document.querySelectorAll("#vorrat-filters .chip").forEach((c) => c.classList.remove("active"));
-      chip.classList.add("active");
-      state.vorratFilter = chip.dataset.filter;
-      renderVorrat();
-    });
+  $("vorrat-filters").addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    state.vorratFilter = chip.dataset.filter;
+    renderVorrat();
   });
   $("vorrat-list").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-action]");
     if (!btn) return;
     const id = btn.dataset.id;
     if (btn.dataset.action === "plus") adjustStock(id, 1);
-    else if (btn.dataset.action === "minus") adjustStock(id, -1);
+    else if (btn.dataset.action === "minus") adjustStock(id, -1, { track: true });
     else if (btn.dataset.action === "open") openItemModal(id);
   });
 
@@ -683,7 +805,7 @@ function wireMainScreen() {
   $("modal-item").addEventListener("click", (e) => { if (e.target === $("modal-item")) closeItemModal(); });
   $("modal-account").addEventListener("click", (e) => { if (e.target === $("modal-account")) $("modal-account").classList.add("hidden"); });
 
-  $("item-stock-minus").addEventListener("click", () => currentEditId && adjustStock(currentEditId, -1));
+  $("item-stock-minus").addEventListener("click", () => currentEditId && adjustStock(currentEditId, -1, { track: true }));
   $("item-stock-plus").addEventListener("click", () => currentEditId && adjustStock(currentEditId, 1));
   $("item-stock-value").addEventListener("change", () => currentEditId && setStockAbsolute(currentEditId, $("item-stock-value").value));
 
@@ -695,8 +817,19 @@ function wireMainScreen() {
     updateDoc(itemRef(currentEditId), { category: $("item-category").value, updatedAt: serverTimestamp() }));
   $("item-unit").addEventListener("change", () => currentEditId &&
     updateDoc(itemRef(currentEditId), { unit: $("item-unit").value.trim(), updatedAt: serverTimestamp() }));
+  $("item-location").addEventListener("change", () => currentEditId &&
+    updateDoc(itemRef(currentEditId), { location: $("item-location").value.trim(), updatedAt: serverTimestamp() }));
   $("item-staple").addEventListener("change", () => currentEditId &&
     updateDoc(itemRef(currentEditId), { staple: $("item-staple").checked, updatedAt: serverTimestamp() }));
+  $("item-autodecrement").addEventListener("change", () => {
+    if (!currentEditId) return;
+    const enabled = $("item-autodecrement").checked;
+    updateDoc(itemRef(currentEditId), {
+      autoDecrement: enabled,
+      autoLastAppliedAt: Date.now(), // Uhr startet beim Ein-/Ausschalten neu
+      updatedAt: serverTimestamp(),
+    });
+  });
 
   $("item-archive").addEventListener("click", async () => {
     if (!currentEditId) return;
@@ -722,9 +855,11 @@ async function submitQuickAdd() {
     name, nameLower: normalize(name),
     category: catalogMatch ? catalogMatch.category : "haushalt",
     unit: catalogMatch ? catalogMatch.unit : "Stück",
+    location: "",
     stock: 0, minStock: 1, targetStock: 1,
     staple: false, active: true, showInVorrat: false, oneOff: true, forced: true, snoozed: false,
     lastBought: null, buyCount: 0,
+    autoDecrement: false, intervalSamples: [], lastDecrementAt: null, avgIntervalMs: null, autoLastAppliedAt: null,
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: state.uid,
   });
 }
@@ -747,12 +882,14 @@ async function submitNewItem(e) {
     name, nameLower: normalize(name),
     category: $("new-category").value,
     unit: $("new-unit").value.trim() || "Stück",
+    location: $("new-location").value.trim(),
     stock: parseFloat($("new-stock").value) || 0,
     minStock: parseFloat($("new-minstock").value) || 0,
     targetStock: parseFloat($("new-target").value) || 1,
     staple: $("new-staple").checked,
     active: true, showInVorrat: true, oneOff: false, forced: false, snoozed: false,
     lastBought: null, buyCount: 0,
+    autoDecrement: false, intervalSamples: [], lastDecrementAt: null, avgIntervalMs: null, autoLastAppliedAt: null,
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: state.uid,
   };
   await addDoc(collection(db, "households", state.householdId, "items"), data);
@@ -763,6 +900,7 @@ async function submitNewItem(e) {
   $("new-stock").value = 1;
   $("new-minstock").value = 1;
   $("new-target").value = 2;
+  $("new-location").value = "";
   $("new-staple").checked = false;
   $("new-name").focus();
 }
@@ -771,6 +909,13 @@ async function submitNewItem(e) {
 wireAuthScreen();
 wireHouseholdScreen();
 wireMainScreen();
+
+// Auto-Verbrauch: läuft alle 30 Minuten, solange die App offen ist, und sofort
+// wenn die App/Tab nach einer Pause wieder in den Vordergrund kommt.
+setInterval(runAutoDecrementCheck, 30 * 60 * 1000);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") runAutoDecrementCheck();
+});
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

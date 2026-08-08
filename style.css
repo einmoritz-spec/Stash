@@ -353,6 +353,7 @@ a { color: var(--pine); }
   align-items: center;
 }
 .staple-pin { color: var(--low); font-size: 11px; }
+.auto-pin { font-size: 11px; }
 
 .item-stock-tap {
   font-family: var(--font-mono);
@@ -529,6 +530,16 @@ a { color: var(--pine); }
 }
 .stock-value-input:focus { outline: none; }
 .stock-unit { display: block; color: var(--ink-soft); font-size: 13px; margin-top: -6px; }
+
+.auto-block {
+  background: var(--surface);
+  border-radius: var(--radius-m);
+  padding: 12px 14px;
+}
+.auto-hint {
+  text-align: left;
+  margin: 4px 0 0;
+}
 
 /* ───────────────────────── Toast ───────────────────────── */
 .toast {
