@@ -673,7 +673,8 @@ function wireAuthScreen() {
       if (authMode === "login") await signInWithEmailAndPassword(auth, email, password);
       else await createUserWithEmailAndPassword(auth, email, password);
     } catch (err) {
-      $("auth-error").textContent = translateAuthError(err.code);
+      console.error(err);
+      $("auth-error").textContent = `${translateAuthError(err.code)} (${err.code || "unbekannt"})`;
       $("auth-error").classList.remove("hidden");
     } finally {
       $("auth-submit").disabled = false;
