@@ -63,6 +63,24 @@ a { color: var(--pine); }
 
 .hidden { display: none !important; }
 
+.loading-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.loading-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--surface-alt);
+  border-top-color: var(--pine);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ───────────────────────── Screens ───────────────────────── */
 .screen {
   min-height: 100vh;
