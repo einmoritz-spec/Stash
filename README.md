@@ -81,6 +81,34 @@ Den Code findet ihr später jederzeit wieder über das ⚙-Symbol oben rechts in
 
 ---
 
+## Schriften selbst hosten (statt Google Fonts über Netzwerk)
+
+Die App lädt ihre Schriften jetzt lokal statt live von Google, damit sie auch offline sofort mit der richtigen Schrift startet. Dafür müssen einmalig 9 Font-Dateien in einen Ordner `fonts/` neben `index.html` gelegt werden - danach läuft alles automatisch (die `style.css` und der Service Worker sind bereits darauf vorbereitet).
+
+1. Geh auf **gwfh.mranftl.com/fonts** (Google Webfonts Helper).
+2. Suche **„Fraunces"** → wähle die Schnitte **500, 600, 700** (jeweils "regular", keine Kursive nötig) → nur **woff2** wird gebraucht → herunterladen.
+3. Suche **„Inter"** → Schnitte **400, 500, 600, 700** → woff2 → herunterladen.
+4. Suche **„JetBrains Mono"** → Schnitte **500, 700** → woff2 → herunterladen.
+5. Erstellt im Projektordner einen neuen Ordner `fonts/` und legt die 9 Dateien dort hinein, **umbenannt auf genau diese Namen** (die Downloads heißen anders, z. B. `fraunces-v.....woff2` - einfach umbenennen):
+
+```
+fonts/fraunces-500.woff2
+fonts/fraunces-600.woff2
+fonts/fraunces-700.woff2
+fonts/inter-400.woff2
+fonts/inter-500.woff2
+fonts/inter-600.woff2
+fonts/inter-700.woff2
+fonts/jetbrains-mono-500.woff2
+fonts/jetbrains-mono-700.woff2
+```
+
+6. Beim Hochladen auf GitHub Pages: den `fonts/`-Ordner mit hochladen wie die anderen Dateien auch.
+
+**Falls ihr das überspringt:** Kein Problem, die App bricht dadurch nicht - sie fällt automatisch auf die System-Schriftart zurück (sieht nur etwas weniger nach „Stash" aus).
+
+---
+
 ## Was die App kann
 
 - **Vorrat**: Bestände mit +/− oder direkter Zahleneingabe pflegen. Dauerartikel stehen immer oben.

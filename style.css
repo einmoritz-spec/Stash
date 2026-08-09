@@ -1,3 +1,77 @@
+/* ───────────────────────── Selbst gehostete Schriften ─────────────────────────
+   Statt Google Fonts über Netzwerk zu laden: Dateien liegen lokal unter ./fonts/,
+   damit die App auch offline mit der richtigen Schrift startet und der SW den
+   Font-Traffic ganz normal cachen kann (Google-Domains sind im SW explizit vom
+   Cache ausgenommen, weil sie live bleiben sollen - lokale Dateien betrifft das
+   nicht). Erwartete Dateinamen, siehe README Abschnitt "Schriften selbst hosten":
+   fonts/fraunces-500.woff2, -600.woff2, -700.woff2
+   fonts/inter-400.woff2, -500.woff2, -600.woff2, -700.woff2
+   fonts/jetbrains-mono-500.woff2, -700.woff2 */
+
+@font-face {
+  font-family: "Fraunces";
+  src: url("./fonts/fraunces-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Fraunces";
+  src: url("./fonts/fraunces-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Fraunces";
+  src: url("./fonts/fraunces-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("./fonts/inter-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("./fonts/inter-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("./fonts/inter-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("./fonts/inter-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./fonts/jetbrains-mono-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./fonts/jetbrains-mono-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ───────────────────────── Design tokens ───────────────────────── */
 :root {
   --bg: #EAEEE7;
@@ -154,6 +228,25 @@ a { color: var(--pine); }
 
 .field-row { display: flex; gap: 10px; min-width: 0; }
 .field-row .field { min-width: 0; }
+
+.more-options { margin: 2px 0; }
+.more-options summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pine-soft);
+  padding: 6px 0;
+  list-style: none;
+}
+.more-options summary::-webkit-details-marker { display: none; }
+.more-options summary::before { content: "+ "; }
+.more-options[open] summary::before { content: "− "; }
+.more-options-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 10px;
+}
 
 .switch-row {
   display: flex;
@@ -393,6 +486,8 @@ a { color: var(--pine); }
   margin-top: 8px;
 }
 
+.item-wrap { display: flex; flex-direction: column; gap: 6px; }
+
 .item-row {
   display: flex;
   align-items: center;
@@ -402,6 +497,28 @@ a { color: var(--pine); }
   padding: 12px 14px;
   box-shadow: var(--shadow-card);
 }
+
+.auto-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--low-bg);
+  color: var(--ink);
+  border-radius: var(--radius-s);
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.auto-prompt-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.auto-prompt button {
+  border: none;
+  border-radius: var(--radius-s);
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.auto-prompt .btn-yes { background: var(--pine); color: #fff; }
+.auto-prompt .btn-no { background: var(--surface); border: 1px solid var(--border); color: var(--ink); }
 
 .gauge {
   width: 6px;
@@ -423,7 +540,7 @@ a { color: var(--pine); }
 .gauge-fill.low { background: var(--low); }
 .gauge-fill.empty { background: var(--empty); }
 
-.item-main { flex: 1; min-width: 0; }
+.item-row .item-main { flex: 1; min-width: 0; cursor: pointer; }
 .item-name {
   font-weight: 600;
   font-size: 15.5px;
@@ -628,6 +745,26 @@ a { color: var(--pine); }
 .auto-hint {
   text-align: left;
   margin: 4px 0 0;
+}
+
+.opened-block {
+  background: var(--surface);
+  border-radius: var(--radius-m);
+  padding: 12px 14px;
+}
+.opened-hint {
+  text-align: left;
+  margin: 4px 0 0;
+}
+
+.opened-pin { color: var(--ink-soft); }
+.opened-pin.opened-warn { color: var(--low); font-weight: 600; }
+
+.btn-ghost.small-link {
+  font-size: 13px;
+  padding: 4px 0;
+  color: var(--ink-soft);
+  text-decoration: underline;
 }
 
 .quick-actions-row {

@@ -11,9 +11,6 @@
 <link rel="apple-touch-icon" href="./icons/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -51,6 +48,7 @@
         <p id="auth-error" class="form-error hidden"></p>
         <button type="submit" class="btn btn-primary" id="auth-submit">Anmelden</button>
         <button type="button" class="btn btn-ghost" id="auth-toggle">Noch kein Konto? Registrieren</button>
+        <button type="button" class="btn btn-ghost small-link" id="auth-forgot">Passwort vergessen?</button>
       </form>
     </div>
   </section>
@@ -147,36 +145,42 @@
           </label>
           <p id="new-barcode-hint" class="hint barcode-hint hidden"></p>
 
-          <label class="field">
-            <span>Einheit</span>
-            <input type="text" id="new-unit" value="Stück" />
-          </label>
-
           <div class="field-row">
             <label class="field">
               <span>Aktueller Bestand</span>
               <input type="number" id="new-stock" value="1" min="0" step="0.5" inputmode="decimal" />
             </label>
             <label class="field">
-              <span>Mindestbestand</span>
-              <input type="number" id="new-minstock" value="1" min="0" step="0.5" inputmode="decimal" />
+              <span>Einheit</span>
+              <input type="text" id="new-unit" value="Stück" />
             </label>
           </div>
 
-          <label class="field">
-            <span>Zielbestand (wie viel beim Nachkauf)</span>
-            <input type="number" id="new-target" value="2" min="0" step="0.5" inputmode="decimal" />
-          </label>
+          <details class="more-options">
+            <summary>Mehr Optionen</summary>
+            <div class="more-options-body">
+              <div class="field-row">
+                <label class="field">
+                  <span>Mindestbestand</span>
+                  <input type="number" id="new-minstock" value="0" min="0" step="0.5" inputmode="decimal" />
+                </label>
+                <label class="field">
+                  <span>Zielbestand (wie viel beim Nachkauf)</span>
+                  <input type="number" id="new-target" value="2" min="0" step="0.5" inputmode="decimal" />
+                </label>
+              </div>
 
-          <label class="field">
-            <span>Lagerort (optional)</span>
-            <input type="text" id="new-location" list="location-list" placeholder="z. B. Keller, Küche, Bad" />
-          </label>
+              <label class="field">
+                <span>Lagerort (optional)</span>
+                <input type="text" id="new-location" list="location-list" placeholder="z. B. Keller, Küche, Bad" />
+              </label>
 
-          <label class="switch-row">
-            <span>Immer im Vorrat anzeigen (Dauerartikel)</span>
-            <input type="checkbox" id="new-staple" />
-          </label>
+              <label class="switch-row">
+                <span>Immer im Vorrat anzeigen (Dauerartikel)</span>
+                <input type="checkbox" id="new-staple" />
+              </label>
+            </div>
+          </details>
 
           <button type="submit" class="btn btn-primary">Artikel anlegen</button>
           <p id="new-item-hint" class="hint hidden"></p>
@@ -259,6 +263,14 @@
         <span>Dauerartikel (immer anzeigen)</span>
         <input type="checkbox" id="item-staple" />
       </label>
+
+      <div class="opened-block">
+        <label class="switch-row">
+          <span>Geöffnet / angebrochen</span>
+          <input type="checkbox" id="item-opened" />
+        </label>
+        <p class="hint opened-hint" id="item-opened-status"></p>
+      </div>
 
       <div class="auto-block">
         <label class="switch-row">

@@ -5,12 +5,12 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
-  signInWithEmailAndPassword, signOut
+  signInWithEmailAndPassword, signOut, sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, doc, getDoc, setDoc, addDoc,
   updateDoc, deleteDoc, collection, query, where, limit, getDocs,
-  onSnapshot, serverTimestamp, runTransaction, arrayUnion
+  onSnapshot, serverTimestamp, arrayUnion, increment
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ───────────────────────── Firebase Setup ─────────────────────────
@@ -521,7 +521,7 @@ const state = {
   items: [],
   unsubItems: null,
   vorratFilter: "alle",
-  pendingCheckoffs: new Map(), // itemId -> { timer }
+  pendingCheckoffs: new Map(), // itemId -> {} (nur fürs sofortige UI-Feedback vor dem nächsten Snapshot)
 };
 let currentEditId = null;
 let expandedGroups = null; // null = noch nicht initialisiert (siehe renderVorratGrouped)
@@ -541,15 +541,45 @@ function esc(s) {
   return d.innerHTML;
 }
 
+// Für Vergleiche (Duplikate finden, Suche, Autovervollständigung) werden
+// Umlaute gefaltet und Mehrfach-Leerzeichen entfernt - "Müsli" und "Muesli"
+// oder "Nudeln  " mit doppeltem Leerzeichen sollen als derselbe Artikel
+// erkannt werden. Der angezeigte Name (item.name) bleibt davon unberührt.
 function normalize(s) {
-  return (s || "").toLowerCase().replace(/ß/g, "ss").trim();
+  return (s || "")
+    .toLowerCase()
+    .replace(/ß/g, "ss")
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function roundHalf(n) { return Math.round((n + Number.EPSILON) * 10) / 10; }
 
+function median(nums) {
+  const s = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
 function formatQty(n) {
   const r = roundHalf(n || 0);
   return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
+// Für die "Geöffnet"-Markierung (z. B. ein angebrochenes Glas Pesto):
+// openedAt ist ein einfacher Date.now()-Zeitstempel (wie autoLastAppliedAt),
+// keine Firestore-Timestamp, damit er sofort ohne Server-Rundlauf lesbar ist.
+function daysSince(ms) {
+  return Math.floor((Date.now() - ms) / 86400000);
+}
+function formatOpenDuration(openedAt) {
+  const days = daysSince(openedAt);
+  if (days <= 0) return "heute geöffnet";
+  if (days === 1) return "seit 1 Tag offen";
+  return `seit ${days} Tagen offen`;
 }
 
 function itemRef(id) { return doc(db, "households", state.householdId, "items", id); }
@@ -600,6 +630,12 @@ async function copyText(text) {
   }
 }
 
+function vibrate(ms = 10) {
+  if (navigator.vibrate) {
+    try { navigator.vibrate(ms); } catch { /* z. B. iOS Safari unterstützt es nicht */ }
+  }
+}
+
 function showToast(message, onUndo) {
   clearTimeout(toastTimer);
   const el = $("toast");
@@ -631,6 +667,19 @@ function showScreen(id) {
 // verlassen. Ohne das würde Android die App beenden.
 function pushAppHistory() {
   try { history.pushState({ stashNav: true }, ""); } catch { /* z. B. in manchen eingebetteten Webviews nicht erlaubt */ }
+}
+
+// Wird von den X-/Außerhalb-Klick-Buttons der Modals/des Scanners aufgerufen,
+// statt die Sichtbarkeit direkt zu ändern. So läuft das Schließen immer über
+// denselben Weg wie der Android-Zurück-Button (popstate → handleBackNavigation)
+// und es bleibt nie ein "totes" Verlaufs-Element übrig, das beim nächsten
+// echten Zurück-Tap unerwartet zum Vorrat-Tab statt zum Schließen führt.
+function closeTopLayer() {
+  if (history.state && history.state.stashNav) {
+    history.back();
+  } else {
+    handleBackNavigation();
+  }
 }
 
 function handleBackNavigation() {
@@ -711,6 +760,18 @@ function subscribeItems(hid) {
       state.items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       renderAll();
       runAutoDecrementCheck();
+      // Da Bestandsänderungen jetzt mit increment() statt Transaktionen laufen
+      // (damit sie offline funktionieren), kann der Wert theoretisch unter 0
+      // rutschen, wenn mehrere "-"-Klicks offline aufgelaufen sind. Sobald der
+      // Server (nicht der lokale Cache) das bestätigt, einmalig auf 0 korrigieren.
+      if (!snap.metadata.fromCache) {
+        snap.docs.forEach((d) => {
+          const data = d.data();
+          if ((data.stock || 0) < 0) {
+            updateDoc(itemRef(d.id), { stock: 0 }).catch(() => {});
+          }
+        });
+      }
     },
     (err) => {
       console.error("Sync-Fehler", err);
@@ -720,52 +781,59 @@ function subscribeItems(hid) {
 }
 
 // Baut aus den letzten Verbrauchs-Intervallen (Zeit zwischen zwei "−"-Klicks)
-// die Felder, die für die Durchschnittsberechnung nötig sind.
-// Erst ab 2 gemessenen Intervallen (= 3 Klicks) gibt es einen Durchschnitt.
+// die Felder, die für die Abstandsberechnung nötig sind.
+// Erst ab 4 gemessenen Intervallen gibt es einen Wert - das dauert länger,
+// bevor die Automatik überhaupt aktiv werden kann, macht die Schätzung aber
+// deutlich robuster gegen Ausreißer (z. B. eine Urlaubswoche ohne Verbrauch).
+// Median statt Mittelwert aus demselben Grund: ein einzelner Ausreißer kippt
+// sonst die ganze Schätzung.
+const AUTO_MIN_SAMPLES = 4;
 function buildTrackingFields(cur, now) {
   const samples = Array.isArray(cur.intervalSamples) ? [...cur.intervalSamples] : [];
   if (cur.lastDecrementAt) {
     const interval = now - cur.lastDecrementAt;
     if (interval > 0) {
       samples.push(interval);
-      if (samples.length > 5) samples.shift();
+      if (samples.length > 8) samples.shift();
     }
   }
   const fields = { intervalSamples: samples, lastDecrementAt: now };
-  if (samples.length >= 2) {
-    fields.avgIntervalMs = Math.round(samples.reduce((a, b) => a + b, 0) / samples.length);
+  if (samples.length >= AUTO_MIN_SAMPLES) {
+    fields.avgIntervalMs = Math.round(median(samples));
   }
   return fields;
 }
 
+// Nutzt increment() statt einer Transaktion, damit +/- auch offline (Keller,
+// Supermarkt ohne Empfang) sofort greift - Firestore holt den Schreibvorgang
+// automatisch nach, sobald wieder Netz da ist. Transaktionen können das nicht,
+// weil sie erst lesen müssen, was offline nicht geht.
 async function adjustStock(itemId, delta, { track = false } = {}) {
   const ref = itemRef(itemId);
   const now = Date.now();
+  const cur = state.items.find((i) => i.id === itemId) || {};
+  const update = {
+    stock: increment(delta),
+    snoozed: false,
+    updatedAt: serverTimestamp(),
+    updatedBy: state.uid,
+    autoLastAppliedAt: now, // jede manuelle Änderung startet die Auto-Uhr neu
+  };
+  if (track && delta < 0) Object.assign(update, buildTrackingFields(cur, now));
   try {
-    await runTransaction(db, async (tx) => {
-      const snap = await tx.get(ref);
-      if (!snap.exists()) return;
-      const cur = snap.data();
-      const next = Math.max(0, roundHalf((cur.stock || 0) + delta));
-      const update = {
-        stock: next,
-        snoozed: false,
-        updatedAt: serverTimestamp(),
-        updatedBy: state.uid,
-        autoLastAppliedAt: now, // jede manuelle Änderung startet die Auto-Uhr neu
-      };
-      if (track && delta < 0) Object.assign(update, buildTrackingFields(cur, now));
-      tx.update(ref, update);
-    });
+    await updateDoc(ref, update);
   } catch (err) {
     console.error(err);
   }
 }
 
-// Prüft alle Artikel mit aktiviertem Auto-Verbrauch: Wie viele durchschnittliche
-// Intervalle sind seit der letzten (echten oder automatischen) Änderung vergangen?
-// Zieht entsprechend viele ganze Einheiten ab. Läuft periodisch im Hintergrund,
-// nicht als Server-Cron - deshalb wirkt sie beim nächsten App-Öffnen nachträglich.
+// Prüft alle Artikel mit aktiviertem Auto-Verbrauch: Ist seit der letzten
+// (echten oder bestätigten) Änderung mindestens ein durchschnittliches
+// Intervall vergangen? Falls ja, wird NICHT mehr still gebucht - stattdessen
+// markieren wir den Artikel als "autoPending" und fragen aktiv nach (siehe
+// itemRowHtml/confirmAutoPending/dismissAutoPending). Eine falsche stille
+// Buchung würde das Vertrauen in die Funktion schneller zerstören, als eine
+// gelegentliche Nachfrage kostet.
 let autoDecrementRunning = false;
 async function runAutoDecrementCheck() {
   if (autoDecrementRunning || !state.householdId) return;
@@ -774,35 +842,52 @@ async function runAutoDecrementCheck() {
     const now = Date.now();
     for (const item of state.items) {
       if (!item.autoDecrement || !item.avgIntervalMs || item.active === false) continue;
+      if (item.autoPending) continue; // schon eine offene Nachfrage
       const base = item.autoLastAppliedAt || item.lastDecrementAt;
       if (!base || (item.stock || 0) <= 0) continue;
       const units = Math.floor((now - base) / item.avgIntervalMs);
       if (units < 1) continue;
 
-      const ref = itemRef(item.id);
       try {
-        await runTransaction(db, async (tx) => {
-          const snap = await tx.get(ref);
-          if (!snap.exists()) return;
-          const cur = snap.data();
-          if (!cur.autoDecrement || !cur.avgIntervalMs) return;
-          const curBase = cur.autoLastAppliedAt || cur.lastDecrementAt;
-          if (!curBase) return;
-          const curUnits = Math.floor((now - curBase) / cur.avgIntervalMs);
-          if (curUnits < 1 || (cur.stock || 0) <= 0) return;
-          const dec = Math.min(curUnits, cur.stock || 0);
-          tx.update(ref, {
-            stock: Math.max(0, roundHalf((cur.stock || 0) - dec)),
-            autoLastAppliedAt: curBase + curUnits * cur.avgIntervalMs,
-            updatedAt: serverTimestamp(),
-          });
+        await updateDoc(itemRef(item.id), {
+          autoPending: Math.min(units, item.stock || 0),
         });
       } catch (err) {
-        console.error("Auto-Verbrauch fehlgeschlagen für", item.name, err);
+        console.error("Auto-Verbrauch-Nachfrage fehlgeschlagen für", item.name, err);
       }
     }
   } finally {
     autoDecrementRunning = false;
+  }
+}
+
+// Nutzer bestätigt die Nachfrage: jetzt erst wird tatsächlich abgebucht.
+async function confirmAutoPending(id) {
+  const item = state.items.find((i) => i.id === id);
+  if (!item || !item.autoPending) return;
+  const dec = Math.min(item.autoPending, item.stock || 0);
+  try {
+    await updateDoc(itemRef(id), {
+      stock: increment(-dec),
+      autoPending: null,
+      autoLastAppliedAt: Date.now(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// Nutzer verneint: nichts abbuchen, aber die Uhr auf jetzt verschieben, damit
+// erst in einem weiteren Intervall wieder nachgefragt wird.
+async function dismissAutoPending(id) {
+  try {
+    await updateDoc(itemRef(id), {
+      autoPending: null,
+      autoLastAppliedAt: Date.now(),
+    });
+  } catch (err) {
+    console.error(err);
   }
 }
 
@@ -818,26 +903,23 @@ async function commitBuy(itemId, qty) {
   const item = state.items.find((i) => i.id === itemId);
   if (!item) return;
   if (item.oneOff) {
-    await deleteDoc(itemRef(itemId));
+    try {
+      await deleteDoc(itemRef(itemId));
+    } catch (err) {
+      console.error(err);
+    }
     return;
   }
-  const ref = itemRef(itemId);
   try {
-    await runTransaction(db, async (tx) => {
-      const snap = await tx.get(ref);
-      if (!snap.exists()) return;
-      const cur = snap.data();
-      const next = Math.max(0, roundHalf((cur.stock || 0) + (parseFloat(qty) || 0)));
-      tx.update(ref, {
-        stock: next,
-        forced: false,
-        snoozed: false,
-        lastBought: serverTimestamp(),
-        buyCount: (cur.buyCount || 0) + 1,
-        updatedAt: serverTimestamp(),
-        updatedBy: state.uid,
-        autoLastAppliedAt: Date.now(),
-      });
+    await updateDoc(itemRef(itemId), {
+      stock: increment(parseFloat(qty) || 0),
+      forced: false,
+      snoozed: false,
+      lastBought: serverTimestamp(),
+      buyCount: increment(1),
+      updatedAt: serverTimestamp(),
+      updatedBy: state.uid,
+      autoLastAppliedAt: Date.now(),
     });
   } catch (err) {
     console.error(err);
@@ -875,16 +957,28 @@ function gaugePercent(item) {
 function itemRowHtml(item) {
   const status = computeStatus(item);
   const pct = gaugePercent(item);
+  const promptHtml = item.autoPending
+    ? `<div class="auto-prompt">
+         <span>Vermutlich ${formatQty(item.autoPending)}× „${esc(item.name)}" verbraucht – abbuchen?</span>
+         <span class="auto-prompt-actions">
+           <button type="button" class="btn-yes" data-action="autoyes" data-id="${item.id}">Ja</button>
+           <button type="button" class="btn-no" data-action="autono" data-id="${item.id}">Nein</button>
+         </span>
+       </div>`
+    : "";
   return `
+  <div class="item-wrap">
   <div class="item-row" data-id="${item.id}">
     <div class="gauge"><div class="gauge-fill ${status}" style="height:${pct}%"></div></div>
     <div class="item-main">
       <div class="item-name">${item.staple ? '<span class="staple-pin">📌</span> ' : ""}${esc(item.name)}</div>
-      <div class="item-meta">${item.unit ? esc(item.unit) : ""}${item.location ? " · " + esc(item.location) : ""}${item.autoDecrement ? ' <span class="auto-pin" title="Automatischer Verbrauch aktiv">⏱</span>' : ""}</div>
+      <div class="item-meta">${item.unit ? esc(item.unit) : ""}${item.location ? " · " + esc(item.location) : ""}${item.autoDecrement ? ' <span class="auto-pin" title="Automatischer Verbrauch aktiv">⏱</span>' : ""}${item.openedAt ? ` · <span class="opened-pin${daysSince(item.openedAt) >= 7 ? " opened-warn" : ""}">${formatOpenDuration(item.openedAt)}</span>` : ""}</div>
     </div>
     <button class="round-btn" data-action="minus" data-id="${item.id}" aria-label="Weniger">−</button>
     <button class="item-stock-tap" data-action="open" data-id="${item.id}">${formatQty(item.stock)}</button>
     <button class="round-btn" data-action="plus" data-id="${item.id}" aria-label="Mehr">+</button>
+  </div>
+  ${promptHtml}
   </div>`;
 }
 
@@ -1066,55 +1160,91 @@ function updateBadge(count) {
   } else {
     badge.classList.add("hidden");
   }
+  // Zusätzlich der Zähler auf dem App-Icon selbst (Homescreen), falls
+  // Browser/Betriebssystem das unterstützt (Chrome/Android, Desktop).
+  if ("setAppBadge" in navigator) {
+    if (count > 0) navigator.setAppBadge(count).catch(() => {});
+    else if ("clearAppBadge" in navigator) navigator.clearAppBadge().catch(() => {});
+  }
 }
 
-function handleCheckToggle(itemId) {
-  if (state.pendingCheckoffs.has(itemId)) {
-    clearTimeout(state.pendingCheckoffs.get(itemId).timer);
-    state.pendingCheckoffs.delete(itemId);
-    renderListe();
-    return;
-  }
+// Bucht sofort (statt erst nach ein paar Sekunden zu warten), damit nichts
+// verloren geht, wenn man z. B. an der Kasse abhakt und das Handy gleich
+// wegsteckt oder die App schließt. "Rückgängig" macht die Buchung danach
+// per echter Gegenbuchung rückgängig, statt nur einen Timer zu stoppen.
+async function handleCheckToggle(itemId) {
   const row = $("liste-groups").querySelector(`.list-row[data-id="${itemId}"]`);
   const qtyInput = row ? row.querySelector(".buy-qty") : null;
   const qty = qtyInput ? parseFloat(qtyInput.value) || 0 : 1;
   const item = state.items.find((i) => i.id === itemId);
+  if (!item) return;
 
   if (row) {
     row.classList.add("checked");
     const cb = row.querySelector(".check-btn");
     if (cb) cb.classList.add("checked");
   }
-
-  const timer = setTimeout(() => commitBuy(itemId, qty), 4000);
-  state.pendingCheckoffs.set(itemId, { timer });
+  state.pendingCheckoffs.set(itemId, {});
   updateBadge(Math.max(0, $("liste-groups").querySelectorAll(".list-row").length - state.pendingCheckoffs.size));
-  showToast(`${item ? item.name : "Artikel"} erledigt`, () => {
-    clearTimeout(timer);
-    state.pendingCheckoffs.delete(itemId);
-    renderListe();
+
+  const wasOneOff = !!item.oneOff;
+  await commitBuy(itemId, qty);
+  state.pendingCheckoffs.delete(itemId);
+
+  showToast(`${item.name} erledigt`, async () => {
+    if (wasOneOff) {
+      // Der Artikel wurde gelöscht - für die Rückgängig-Funktion neu anlegen.
+      await addDoc(collection(db, "households", state.householdId, "items"), {
+        name: item.name, nameLower: normalize(item.name),
+        unit: item.unit || "Stück", location: item.location || "",
+        stock: 0, minStock: 1, targetStock: 1,
+        staple: false, active: true, showInVorrat: false, oneOff: true, forced: true, snoozed: false,
+        lastBought: null, buyCount: 0,
+        autoDecrement: false, intervalSamples: [], lastDecrementAt: null, avgIntervalMs: null, autoLastAppliedAt: null, openedAt: null,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: state.uid,
+      });
+    } else {
+      await updateDoc(itemRef(itemId), {
+        stock: increment(-(parseFloat(qty) || 0)),
+        forced: true,
+        buyCount: increment(-1),
+        updatedAt: serverTimestamp(),
+      });
+    }
   });
 }
 
 // ───────────────────────── Item-Modal ─────────────────────────
 function formatAutoStatus(item) {
   const samples = Array.isArray(item.intervalSamples) ? item.intervalSamples : [];
-  if (samples.length < 2 || !item.avgIntervalMs) {
-    return `Noch nicht genug Messwerte (${samples.length} von 2 gemessenen Zeitspannen). Jedes Mal, wenn du „−" drückst, merkt sich die App, wie lange der Vorrat gehalten hat.`;
+  if (samples.length < AUTO_MIN_SAMPLES || !item.avgIntervalMs) {
+    return `Noch nicht genug Messwerte (${samples.length} von ${AUTO_MIN_SAMPLES} gemessenen Zeitspannen). Jedes Mal, wenn du „−" drückst, merkt sich die App, wie lange der Vorrat gehalten hat.`;
   }
   const days = item.avgIntervalMs / 86400000;
   const daysLabel = days < 1 ? `${Math.round(item.avgIntervalMs / 3600000)} Std.` : `${roundHalf(days)} Tagen`;
-  let text = `Ø wird alle ${daysLabel} um 1 verbraucht.`;
-  if (item.autoDecrement) {
+  let text = `Hält typischerweise ${daysLabel}.`;
+  if (item.autoPending) {
+    text += ` Die App fragt gerade nach, ob das zutrifft.`;
+  } else if (item.autoDecrement) {
     const base = item.autoLastAppliedAt || item.lastDecrementAt || Date.now();
     const remainingMs = base + item.avgIntervalMs - Date.now();
     const remainingDays = Math.max(0, remainingMs / 86400000);
     const remainingLabel = remainingDays < 1 ? `${Math.max(0, Math.round(remainingMs / 3600000))} Std.` : `${roundHalf(remainingDays)} Tagen`;
-    text += ` Nächster automatischer Abzug in etwa ${remainingLabel}.`;
+    text += ` In etwa ${remainingLabel} fragt die App nach, ob er leer ist - abgebucht wird nie automatisch, ohne dass du bestätigst.`;
   } else {
     text += ` Automatik ist ausgeschaltet.`;
   }
   return text;
+}
+
+function formatOpenedStatus(item) {
+  if (!item.openedAt) {
+    return "Markiere ein angebrochenes Glas/Paket, um zu sehen, wie viele Tage es schon offen ist.";
+  }
+  const days = daysSince(item.openedAt);
+  const openedDate = new Date(item.openedAt).toLocaleDateString("de-DE");
+  const label = days <= 0 ? "Heute geöffnet" : days === 1 ? "Seit 1 Tag offen" : `Seit ${days} Tagen offen`;
+  return `${label} (geöffnet am ${openedDate}).`;
 }
 
 function openItemModal(id) {
@@ -1124,11 +1254,13 @@ function openItemModal(id) {
   $("item-modal-title").textContent = item.name;
   $("item-stock-value").value = formatQty(item.stock || 0);
   $("item-stock-unit").textContent = item.unit || "";
-  $("item-minstock").value = item.minStock ?? 1;
+  $("item-minstock").value = item.minStock ?? 0;
   $("item-target").value = item.targetStock ?? 2;
   $("item-unit").value = item.unit || "";
   $("item-location").value = item.location || "";
   $("item-staple").checked = !!item.staple;
+  $("item-opened").checked = !!item.openedAt;
+  $("item-opened-status").textContent = formatOpenedStatus(item);
   $("item-autodecrement").checked = !!item.autoDecrement;
   $("item-autodecrement-status").textContent = formatAutoStatus(item);
   $("modal-item").classList.remove("hidden");
@@ -1143,10 +1275,12 @@ function closeItemModal(fromPopState = false) {
 function refreshOpenModalIfNeeded() {
   if (!currentEditId) return;
   const item = state.items.find((i) => i.id === currentEditId);
-  if (!item) { closeItemModal(); return; }
+  if (!item) { closeTopLayer(); return; }
   if (document.activeElement !== $("item-stock-value")) {
     $("item-stock-value").value = formatQty(item.stock || 0);
   }
+  $("item-opened").checked = !!item.openedAt;
+  $("item-opened-status").textContent = formatOpenedStatus(item);
   $("item-autodecrement-status").textContent = formatAutoStatus(item);
 }
 
@@ -1226,6 +1360,27 @@ function wireAuthScreen() {
       $("auth-error").classList.remove("hidden");
     } finally {
       $("auth-submit").disabled = false;
+    }
+  });
+
+  // Passwort-Reset: nur sinnvoll, wenn beim Registrieren eine echte,
+  // erreichbare E-Mail-Adresse verwendet wurde (siehe README) - bei einer
+  // Fantasie-Adresse kommt logischerweise keine Mail an.
+  $("auth-forgot").addEventListener("click", async () => {
+    const email = $("auth-email").value.trim();
+    $("auth-error").classList.add("hidden");
+    if (!email) {
+      $("auth-error").textContent = "Bitte zuerst deine E-Mail-Adresse oben eintragen.";
+      $("auth-error").classList.remove("hidden");
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      showToast("Falls ein Konto existiert, wurde eine E-Mail zum Zurücksetzen verschickt.");
+    } catch (err) {
+      console.error(err);
+      $("auth-error").textContent = `${translateAuthError(err.code)} (${err.code || "unbekannt"})`;
+      $("auth-error").classList.remove("hidden");
     }
   });
 }
@@ -1316,7 +1471,7 @@ async function openScanner(onResult) {
       const codes = await detector.detect(video);
       if (codes.length > 0) {
         const value = codes[0].rawValue;
-        closeScanner();
+        closeTopLayer();
         onResult(value);
         return;
       }
@@ -1381,7 +1536,7 @@ function wireMainScreen() {
   document.querySelectorAll(".navbtn").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
 
   $("btn-account").addEventListener("click", () => { $("modal-account").classList.remove("hidden"); pushAppHistory(); });
-  $("modal-account-close").addEventListener("click", () => $("modal-account").classList.add("hidden"));
+  $("modal-account-close").addEventListener("click", closeTopLayer);
   $("account-copy-code").addEventListener("click", () => copyText(state.joinCode));
   $("btn-signout").addEventListener("click", () => { $("modal-account").classList.add("hidden"); signOut(auth); });
 
@@ -1403,11 +1558,22 @@ function wireMainScreen() {
       return;
     }
     const btn = e.target.closest("button[data-action]");
-    if (!btn) return;
-    const id = btn.dataset.id;
-    if (btn.dataset.action === "plus") adjustStock(id, 1);
-    else if (btn.dataset.action === "minus") adjustStock(id, -1, { track: true });
-    else if (btn.dataset.action === "open") openItemModal(id);
+    if (btn) {
+      const id = btn.dataset.id;
+      if (btn.dataset.action === "plus") { adjustStock(id, 1); vibrate(); }
+      else if (btn.dataset.action === "minus") { adjustStock(id, -1, { track: true }); vibrate(); }
+      else if (btn.dataset.action === "open") openItemModal(id);
+      else if (btn.dataset.action === "autoyes") confirmAutoPending(id);
+      else if (btn.dataset.action === "autono") dismissAutoPending(id);
+      return;
+    }
+    // Ganze Zeile antippbar machen, nicht nur der Bestandswert - antippen
+    // von Name/Einheit/Ort öffnet ebenfalls das Artikel-Detail.
+    const main = e.target.closest(".item-main");
+    if (main) {
+      const row = main.closest(".item-row");
+      if (row) openItemModal(row.dataset.id);
+    }
   });
 
   // Einkaufsliste
@@ -1454,7 +1620,7 @@ function wireMainScreen() {
     if (!panel.classList.contains("hidden")) $("quicktrack-input").focus();
   });
   $("quicktrack-submit").addEventListener("click", submitQuickTrack);
-  $("scanner-close").addEventListener("click", closeScanner);
+  $("scanner-close").addEventListener("click", closeTopLayer);
 
   document.addEventListener("click", (e) => {
     document.querySelectorAll(".suggestions").forEach((s) => {
@@ -1466,12 +1632,12 @@ function wireMainScreen() {
   });
 
   // Item-Modal
-  $("modal-item-close").addEventListener("click", closeItemModal);
-  $("modal-item").addEventListener("click", (e) => { if (e.target === $("modal-item")) closeItemModal(); });
-  $("modal-account").addEventListener("click", (e) => { if (e.target === $("modal-account")) $("modal-account").classList.add("hidden"); });
+  $("modal-item-close").addEventListener("click", closeTopLayer);
+  $("modal-item").addEventListener("click", (e) => { if (e.target === $("modal-item")) closeTopLayer(); });
+  $("modal-account").addEventListener("click", (e) => { if (e.target === $("modal-account")) closeTopLayer(); });
 
-  $("item-stock-minus").addEventListener("click", () => currentEditId && adjustStock(currentEditId, -1, { track: true }));
-  $("item-stock-plus").addEventListener("click", () => currentEditId && adjustStock(currentEditId, 1));
+  $("item-stock-minus").addEventListener("click", () => { if (currentEditId) { adjustStock(currentEditId, -1, { track: true }); vibrate(); } });
+  $("item-stock-plus").addEventListener("click", () => { if (currentEditId) { adjustStock(currentEditId, 1); vibrate(); } });
   $("item-stock-value").addEventListener("change", () => currentEditId && setStockAbsolute(currentEditId, $("item-stock-value").value));
 
   $("item-minstock").addEventListener("change", () => currentEditId &&
@@ -1484,6 +1650,14 @@ function wireMainScreen() {
     updateDoc(itemRef(currentEditId), { location: $("item-location").value.trim(), updatedAt: serverTimestamp() }));
   $("item-staple").addEventListener("change", () => currentEditId &&
     updateDoc(itemRef(currentEditId), { staple: $("item-staple").checked, updatedAt: serverTimestamp() }));
+  $("item-opened").addEventListener("change", () => {
+    if (!currentEditId) return;
+    const checked = $("item-opened").checked;
+    updateDoc(itemRef(currentEditId), {
+      openedAt: checked ? Date.now() : null,
+      updatedAt: serverTimestamp(),
+    });
+  });
   $("item-autodecrement").addEventListener("change", () => {
     if (!currentEditId) return;
     const enabled = $("item-autodecrement").checked;
@@ -1498,7 +1672,7 @@ function wireMainScreen() {
     if (!currentEditId) return;
     if (!confirm('Artikel aus Vorrat und Einkaufsliste entfernen? Er bleibt im Hintergrund gespeichert, damit er dir beim erneuten Eintippen als Vorschlag angeboten wird - du kannst ihn also jederzeit wieder hinzufügen.')) return;
     await updateDoc(itemRef(currentEditId), { active: false, forced: false, snoozed: false, staple: false });
-    closeItemModal();
+    closeTopLayer();
   });
 
   $("item-delete").addEventListener("click", async () => {
@@ -1506,7 +1680,7 @@ function wireMainScreen() {
     const item = state.items.find((i) => i.id === currentEditId);
     if (!confirm(`„${item ? item.name : "Artikel"}" endgültig löschen? Das kann nicht rückgängig gemacht werden, und er wird auch nicht mehr als Vorschlag beim Eintippen erscheinen.`)) return;
     await deleteDoc(itemRef(currentEditId));
-    closeItemModal();
+    closeTopLayer();
   });
 }
 
@@ -1566,16 +1740,19 @@ async function submitQuickTrack() {
       updated++;
     } else {
       const catalogMatch = CATALOG.find((c) => normalize(c.name) === normalize(name));
+      // minStock bewusst auf 0, nicht 1: wer gerade "1 Zahnpasta" erfasst hat,
+      // meint damit "ich habe eine", nicht "kauf sofort nach". Sonst würde der
+      // Artikel augenblicklich wieder auf der Einkaufsliste auftauchen.
       await addDoc(collection(db, "households", state.householdId, "items"), {
         name, nameLower: normalize(name),
         unit: catalogMatch ? catalogMatch.unit : "Stück",
         location: "",
         barcode: null,
         stock: Math.max(0, roundHalf(qty)),
-        minStock: 1, targetStock: Math.max(2, Math.ceil(qty)),
+        minStock: 0, targetStock: Math.max(2, Math.ceil(qty)),
         staple: false, active: true, showInVorrat: true, oneOff: false, forced: false, snoozed: false,
         lastBought: null, buyCount: 0,
-        autoDecrement: false, intervalSamples: [], lastDecrementAt: null, avgIntervalMs: null, autoLastAppliedAt: null,
+        autoDecrement: false, intervalSamples: [], lastDecrementAt: null, avgIntervalMs: null, autoLastAppliedAt: null, openedAt: null,
         createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: state.uid,
       });
       created++;
@@ -1609,7 +1786,7 @@ async function submitQuickAdd() {
     stock: 0, minStock: 1, targetStock: 1,
     staple: false, active: true, showInVorrat: false, oneOff: true, forced: true, snoozed: false,
     lastBought: null, buyCount: 0,
-    autoDecrement: false, intervalSamples: [], lastDecrementAt: null, avgIntervalMs: null, autoLastAppliedAt: null,
+    autoDecrement: false, intervalSamples: [], lastDecrementAt: null, avgIntervalMs: null, autoLastAppliedAt: null, openedAt: null,
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: state.uid,
   });
 }
@@ -1649,7 +1826,7 @@ async function submitNewItem(e) {
     staple: $("new-staple").checked,
     active: true, showInVorrat: true, oneOff: false, forced: false, snoozed: false,
     lastBought: null, buyCount: 0,
-    autoDecrement: false, intervalSamples: [], lastDecrementAt: null, avgIntervalMs: null, autoLastAppliedAt: null,
+    autoDecrement: false, intervalSamples: [], lastDecrementAt: null, avgIntervalMs: null, autoLastAppliedAt: null, openedAt: null,
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: state.uid,
   };
   await addDoc(collection(db, "households", state.householdId, "items"), data);
@@ -1660,7 +1837,7 @@ async function submitNewItem(e) {
   $("new-item-hint").classList.remove("hidden");
   $("new-name").value = "";
   $("new-stock").value = 1;
-  $("new-minstock").value = 1;
+  $("new-minstock").value = 0;
   $("new-target").value = 2;
   $("new-location").value = "";
   $("new-staple").checked = false;
@@ -1679,8 +1856,17 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") runAutoDecrementCheck();
 });
 
+// Nur damit "seit X Tagen offen" auch dann weiterzählt, wenn sich sonst
+// nichts an den Daten ändert - keine Schreibvorgänge, nur ein Neu-Rendern.
+setInterval(() => { renderVorrat(); refreshOpenModalIfNeeded(); }, 30 * 60 * 1000);
+
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./sw.js").catch((err) => console.error("SW-Registrierung fehlgeschlagen", err));
+  });
+  let swAlreadyControlled = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (swAlreadyControlled) showToast("App wurde aktualisiert");
+    swAlreadyControlled = true;
   });
 }
